@@ -5,6 +5,7 @@ module move_castle::castle {
     use sui::clock::{Self, Clock};
     use sui::tx_context::{Self, TxContext};
     use std::string::{Self, String};
+    use std::vector;
     use move_castle::utils;
 
     struct Castle has key, store {
@@ -38,8 +39,15 @@ module move_castle::castle {
     /// Max soldier count per castle - big castle
     const MAX_SOLDIERS_MAX_CASTLE : u16 = 2000;
 
+    /// TODO Design the required exp
+    /// Experience points required for castle level 2 - 10
+    const REQUIRED_EXP_LEVELS : vector<u64> = vector[10, 20, 30, 40, 50, 60, 70, 80, 90];
+
+    /// Max castle level
+    const MAX_CASTLE_LEVEL : u64 = 10;
+
     /// Create new castle
-    public entry fun build_castle(size: u8, name_bytes: vector<u8>, serial_number: u64, clock: &Clock, ctx: &mut TxContext) {
+    public entry fun build_castle(size: u8, name_bytes: vector<u8>, clock: &Clock, ctx: &mut TxContext) {
         let castle_economic = Economic {
             treasury: 0,
             base_power: 1,
@@ -61,6 +69,36 @@ module move_castle::castle {
         
         transfer::public_transfer(castle, tx_context::sender(ctx));
     }
+
+    /// Only for test
+    public entry fun test_update_castle(castle: &mut Castle, ctx: &mut TxContext) {
+        castle.experience_pool = castle.experience_pool + 10;
+        castle.economic.treasury = castle.economic.treasury + 10;
+    }
+
+    /// Consume experience points from the experience pool to upgrade the castle
+    public entry fun upgrade_castle(castle: &mut Castle, ctx: &mut TxContext) {
+        let initial_level = castle.level;
+        while (castle.level < MAX_CASTLE_LEVEL) {
+            let exp_required_at_current_level = *vector::borrow(&REQUIRED_EXP_LEVELS, castle.level - 1);
+            if(castle.experience_pool - exp_required_at_current_level < 0) {
+                break
+            };
+
+            castle.experience_pool = castle.experience_pool - exp_required_at_current_level;
+            castle.level = castle.level + 1;
+        };
+
+        if (castle.level > initial_level) {
+            /// TODO emit castle upgrade event
+        }
+    }
+
+    /// Settle castle's treasury, including victory rewards and defeat penalties
+    public entry fun settle_castle_treasury(castle: &mut Castle, clock: &Clock, ctx: &mut TxContext) {
+
+    }
+
 
     /// Transfer castle
     public entry fun transfer_castle(castle: Castle, to: address) {
