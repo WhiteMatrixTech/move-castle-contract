@@ -1,3 +1,4 @@
+#[allow(unused_variable)]
 module move_castle::castle {
 
     use sui::object::{Self, UID};
@@ -7,6 +8,7 @@ module move_castle::castle {
     use std::string::{Self, String};
     use std::vector;
     use move_castle::utils;
+    use std::debug;
 
     struct Castle has key, store {
         id: UID,
@@ -70,8 +72,13 @@ module move_castle::castle {
         transfer::public_transfer(castle, tx_context::sender(ctx));
     }
 
+    public fun get_level(castle: &Castle): u64 {
+        castle.level
+    }
+
+    #[test_only]
     /// Only for test
-    public entry fun test_update_castle(castle: &mut Castle, ctx: &mut TxContext) {
+    public fun test_update_castle(castle: &mut Castle) {
         castle.experience_pool = castle.experience_pool + 10;
         castle.economic.treasury = castle.economic.treasury + 10;
     }
@@ -81,7 +88,7 @@ module move_castle::castle {
         let initial_level = castle.level;
         while (castle.level < MAX_CASTLE_LEVEL) {
             let exp_required_at_current_level = *vector::borrow(&REQUIRED_EXP_LEVELS, castle.level - 1);
-            if(castle.experience_pool - exp_required_at_current_level < 0) {
+            if(castle.experience_pool < exp_required_at_current_level) {
                 break
             };
 
@@ -109,4 +116,37 @@ module move_castle::castle {
     public entry fun recruit_soldiers (castle: &mut Castle, count: u32, ctx: &mut TxContext) {
 
     }
+
+    // #[test]
+    // fun upgrade_castle_test() {
+    //     let owner = @0xABC;
+
+    //     let scenario_val = test_scenario::begin(owner);
+    //     let scenario = &mut scenario_val;
+    //     let castle_economic = Economic {
+    //         treasury: 0,
+    //         base_power: 1,
+    //         last_settle_time: 123,
+    //     };
+
+    //     let obj_id = object::new(test_scenario::ctx(scenario));
+    //     let serial_number = utils::generate_castle_serial_number(1, &mut obj_id);
+    //     let castle = Castle {
+    //         id: obj_id,
+    //         name: string::utf8(vector[72, 101, 108, 108, 111]),
+    //         serial_number: serial_number,
+    //         level: 1,
+    //         attack_power: 1,
+    //         defence_power: 1,
+    //         experience_pool: 10,
+    //         economic: castle_economic,
+    //     };
+    //     transfer::transfer(castle, owner);
+
+    //     test_scenario::next_tx(scenario, owner);
+    //     let castle_ref = &mut castle;
+    //     upgrade_castle(castle_ref, test_scenario::ctx(scenario));
+    //     test_scenario::end(scenario_val);
+        
+    // }
 }
