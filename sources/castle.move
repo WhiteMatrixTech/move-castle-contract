@@ -117,36 +117,4 @@ module move_castle::castle {
 
     }
 
-    // #[test]
-    // fun upgrade_castle_test() {
-    //     let owner = @0xABC;
-
-    //     let scenario_val = test_scenario::begin(owner);
-    //     let scenario = &mut scenario_val;
-    //     let castle_economic = Economic {
-    //         treasury: 0,
-    //         base_power: 1,
-    //         last_settle_time: 123,
-    //     };
-
-    //     let obj_id = object::new(test_scenario::ctx(scenario));
-    //     let serial_number = utils::generate_castle_serial_number(1, &mut obj_id);
-    //     let castle = Castle {
-    //         id: obj_id,
-    //         name: string::utf8(vector[72, 101, 108, 108, 111]),
-    //         serial_number: serial_number,
-    //         level: 1,
-    //         attack_power: 1,
-    //         defence_power: 1,
-    //         experience_pool: 10,
-    //         economic: castle_economic,
-    //     };
-    //     transfer::transfer(castle, owner);
-
-    //     test_scenario::next_tx(scenario, owner);
-    //     let castle_ref = &mut castle;
-    //     upgrade_castle(castle_ref, test_scenario::ctx(scenario));
-    //     test_scenario::end(scenario_val);
-        
-    // }
 }
