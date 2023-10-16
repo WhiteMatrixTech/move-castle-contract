@@ -4,7 +4,7 @@ module move_castle::utils {
     use std::vector;
     use sui::object::{Self, UID};
 
-    public fun generate_castle_serial_number(size: u8, id: &mut UID): u64 {
+    public fun generate_castle_serial_number(size: u64, id: &mut UID): u64 {
         let hash = hash::sha2_256(object::uid_to_bytes(id));
         let result_num: u64 = 0;
 
@@ -15,6 +15,6 @@ module move_castle::utils {
         };
         result_num = result_num % 1000000u64;
 
-        (size as u64) * 10000000u64 + result_num * 10
+        size * 10000000u64 + result_num * 10
     }
 }
