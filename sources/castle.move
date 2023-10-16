@@ -283,7 +283,9 @@ module move_castle::castle {
     }
 
     /// Consume experience points from the experience pool to upgrade the castle
-    public entry fun upgrade_castle(castle: &mut Castle, ctx: &mut TxContext) {
+    public entry fun upgrade_castle(castle: &mut Castle, clock: &Clock, ctx: &mut TxContext) {
+        /// TODO must after battle results settled
+
         let initial_level = castle.level;
         while (castle.level < MAX_CASTLE_LEVEL) {
             let exp_required_at_current_level = *vector::borrow(&REQUIRED_EXP_LEVELS, castle.level - 1);
@@ -297,10 +299,33 @@ module move_castle::castle {
 
         if (castle.level > initial_level) {
             event::emit(CastleUpgraded{id: object::uid_to_inner(&castle.id), level: castle.level});
+            let (base_economic_power, total_economic_power) = calculate_castle_economic_power(freeze(castle));
+            castle.economic.base_power = base_economic_power;
+            vector::push_back(&mut castle.economic.power_timestamps, EconomicPowerTimestamp{
+                    total_power: total_economic_power,
+                    timestamp: clock::timestamp_ms(clock),
+                });
+
             let (attack_power, defence_power) = calculate_castle_base_attack_defence_power(freeze(castle));
             castle.attack_power = attack_power;
             castle.defence_power = defence_power;
         }
+    }
+
+    fun calculate_castle_economic_power(castle: &Castle): (u64, u64) {
+        let size = get_castle_size(castle.serial_number);
+        let initial_base_power = INITIAL_ECONOMIC_POWER_SMALL_CASTLE;
+        if (size == CASTLE_SIZE_MIDDLE) {
+            initial_base_power = INITIAL_ECONOMIC_POWER_MIDDLE_CASTLE;
+        };
+        if (size == CASTLE_SIZE_BIG) {
+            initial_base_power = INITIAL_ECONOMIC_POWER_BIG_CASTLE;
+        };
+
+        let level = get_castle_level(castle);
+        let base_power = math::divide_and_round_up(initial_base_power * math::pow(12, ((level - 1) as u8)), 100);
+        let total_power = base_power + castle.soldiers * SOLDIER_ECONOMIC_POWER;
+        (base_power, total_power)
     }
 
     /// Calculate castle's base attack power and base defence power based on level
