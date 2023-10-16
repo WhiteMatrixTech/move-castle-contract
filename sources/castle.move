@@ -183,13 +183,6 @@ module move_castle::castle {
         serial_number / 10000000
     }
 
-    #[test_only]
-    /// Only for test
-    public fun test_update_castle(castle: &mut Castle) {
-        castle.experience_pool = castle.experience_pool + 10;
-        castle.economic.treasury = castle.economic.treasury + 10;
-    }
-
     /// Consume experience points from the experience pool to upgrade the castle
     public entry fun upgrade_castle(castle: &mut Castle, ctx: &mut TxContext) {
         let initial_level = castle.level;
@@ -269,6 +262,43 @@ module move_castle::castle {
 
         castle.economic.treasury = castle.economic.treasury - total_soldier_price;
         castle.solders = final_soldiers;
+    }
+
+    #[test_only]
+    /// Only for test
+    public fun test_update_castle(castle: &mut Castle) {
+        castle.experience_pool = castle.experience_pool + 10;
+        castle.economic.treasury = castle.economic.treasury + 10;
+    }
+
+    #[test_only]
+    public fun add_castle_exp(castle: &mut Castle, exp: u64) {
+        castle.experience_pool = castle.experience_pool + exp;
+    }
+
+    #[test_only]
+    public fun add_castle_treasury(castle: &mut Castle, treasury: u64) {
+        castle.economic.treasury = castle.economic.treasury + treasury;
+    }
+
+    #[test_only]
+    public fun set_castle_level(castle: &mut Castle, level: u64) {
+        castle.level = level;
+    }
+
+    #[test_only]
+    public fun set_castle_exp(castle: &mut Castle, exp: u64) {
+        castle.experience_pool = exp;
+    }
+
+    #[test_only]
+    public fun set_castle_treasury(castle: &mut Castle, treasury: u64) {
+        castle.economic.treasury = treasury;
+    }
+
+    #[test_only]
+    public fun get_castle_exp(castle: &Castle): u64 {
+        castle.experience_pool
     }
 
 }
