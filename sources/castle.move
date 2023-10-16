@@ -1,14 +1,14 @@
 #[allow(unused_variable)]
 module move_castle::castle {
 
-    use sui::object::{Self, UID};
+    use sui::object::{Self, UID, ID};
     use sui::transfer;
     use sui::clock::{Self, Clock};
     use sui::tx_context::{Self, TxContext};
     use std::string::{Self, String};
     use std::vector;
     use move_castle::utils;
-    use std::debug;
+    use sui::event;
 
     struct Castle has key, store {
         id: UID,
@@ -25,6 +25,11 @@ module move_castle::castle {
         treasury: u64,
         base_power: u64,
         last_settle_time: u64,
+    }
+
+    struct CastleBuilt has copy, drop {
+        id: ID,
+        owner: address,
     }
 
     /// Castle size - small
@@ -69,7 +74,13 @@ module move_castle::castle {
             economic: castle_economic,
         };
         
-        transfer::public_transfer(castle, tx_context::sender(ctx));
+        let owner = tx_context::sender(ctx);
+        event::emit(CastleBuilt{id: object::uid_to_inner(&castle.id), owner: owner});
+        transfer::public_transfer(castle, owner);
+    }
+
+    fun get_id(castle: &Castle): ID {
+        object::uid_to_inner(&castle.id)
     }
 
     public fun get_level(castle: &Castle): u64 {
