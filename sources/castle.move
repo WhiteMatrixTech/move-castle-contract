@@ -27,9 +27,16 @@ module move_castle::castle {
         last_settle_time: u64,
     }
 
+    /// Event - castle built
     struct CastleBuilt has copy, drop {
         id: ID,
         owner: address,
+    }
+
+    /// Event - castle upgraded
+    struct CastleUpgraded has copy, drop {
+        id: ID,
+        level: u64,
     }
 
     /// Castle size - small
@@ -79,10 +86,6 @@ module move_castle::castle {
         transfer::public_transfer(castle, owner);
     }
 
-    fun get_id(castle: &Castle): ID {
-        object::uid_to_inner(&castle.id)
-    }
-
     public fun get_level(castle: &Castle): u64 {
         castle.level
     }
@@ -108,7 +111,7 @@ module move_castle::castle {
         };
 
         if (castle.level > initial_level) {
-            /// TODO emit castle upgrade event
+            event::emit(CastleUpgraded{id: object::uid_to_inner(&castle.id), level: castle.level});
         }
     }
 
