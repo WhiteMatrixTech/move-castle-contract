@@ -27,7 +27,12 @@ module move_castle::castle {
     struct Economic has store {
         treasury: u64,
         base_power: u64,
-        last_settle_time: u64,
+        power_timestamps: vector<EconomicPowerTimestamp>,
+    }
+
+    struct EconomicPowerTimestamp has store, drop {
+        total_power: u64,
+        timestamp: u64
     }
 
     /// Event - castle built
@@ -85,7 +90,7 @@ module move_castle::castle {
     /// Initial attack power - undead castle
     const INITIAL_ATTCK_POWER_UNDEAD : u64 = 800;
 
-    /// Initial defenceDEFENCE power - human castle
+    /// Initial defence power - human castle
     const INITIAL_DEFENCE_POWER_HUMAN : u64 = 1000;
     /// Initial defence power - elf castle
     const INITIAL_DEFENCE_POWER_ELF : u64 = 1500;
@@ -95,6 +100,13 @@ module move_castle::castle {
     const INITIAL_DEFENCE_POWER_GOBLIN : u64 = 800;
     /// Initial defence power - undead castle
     const INITIAL_DEFENCE_POWER_UNDEAD : u64 = 1200;
+
+    /// Initial economic power - small castle
+    const INITIAL_ECONOMIC_POWER_SMALL_CASTLE : u64 = 100;
+    /// Initial economic power - middle castle
+    const INITIAL_ECONOMIC_POWER_MIDDLE_CASTLE : u64 = 150;
+    /// Initial economic power - big castle
+    const INITIAL_ECONOMIC_POWER_BIG_CASTLE : u64 = 250;
 
     /// Soldier attack power - human
     const SOLDIER_ATTACK_POWER_HUMAN : u64 = 100;
@@ -138,8 +150,8 @@ module move_castle::castle {
     public entry fun build_castle(size: u64, name_bytes: vector<u8>, clock: &Clock, ctx: &mut TxContext) {
         let castle_economic = Economic {
             treasury: 0,
-            base_power: 1,
-            last_settle_time: clock::timestamp_ms(clock),
+            base_power: get_initial_economic_power(size),
+            power_timestamps: vector::empty<EconomicPowerTimestamp>(),
         };
 
         let obj_id = object::new(ctx);
@@ -159,6 +171,14 @@ module move_castle::castle {
             economic: castle_economic,
             soldiers: 10,
         };
+
+        let total_economic_power = get_castle_total_economic_power(&castle);
+        vector::push_back(
+            &mut castle.economic.power_timestamps, 
+            EconomicPowerTimestamp {
+                total_power: total_economic_power, 
+                timestamp: clock::timestamp_ms(clock),
+            });
         
         let owner = tx_context::sender(ctx);
         event::emit(CastleBuilt{id: object::uid_to_inner(&castle.id), owner: owner});
@@ -181,6 +201,18 @@ module move_castle::castle {
             (attack, defence) = (INITIAL_ATTCK_POWER_UNDEAD, INITIAL_DEFENCE_POWER_UNDEAD);
         };
         (attack, defence)
+    }
+
+    // Get initial economic power by castle size
+    fun get_initial_economic_power(size: u64): u64 {
+        let power = INITIAL_ECONOMIC_POWER_SMALL_CASTLE;
+        if (size == CASTLE_SIZE_MIDDLE) {
+            power = INITIAL_ECONOMIC_POWER_MIDDLE_CASTLE;
+        };
+        if (size == CASTLE_SIZE_BIG) {
+            power = INITIAL_ECONOMIC_POWER_BIG_CASTLE;
+        };
+        power
     }
 
     /// Get castle level
@@ -245,6 +277,11 @@ module move_castle::castle {
         castle.attack_power + castle.soldiers * soldier_defence_power
     }
 
+    /// Castle's base economic power plus castle's all soldier's economic power
+    public fun get_castle_total_economic_power(castle: &Castle): u64 {
+        castle.economic.base_power + castle.soldiers * SOLDIER_ECONOMIC_POWER
+    }
+
     /// Consume experience points from the experience pool to upgrade the castle
     public entry fun upgrade_castle(castle: &mut Castle, ctx: &mut TxContext) {
         let initial_level = castle.level;
@@ -292,7 +329,27 @@ module move_castle::castle {
 
     /// Settle castle's treasury, including victory rewards and defeat penalties
     public entry fun settle_castle_treasury(castle: &mut Castle, clock: &Clock, ctx: &mut TxContext) {
+        // 1. TODO find the castle's economic mutate times in battle results
 
+        // 2. calculate economic benefits period by period
+        if (!vector::is_empty(&castle.economic.power_timestamps)) {
+            let start = vector::remove(&mut castle.economic.power_timestamps, 0);
+            while (!vector::is_empty(&castle.economic.power_timestamps)) {
+                let middle = vector::remove(&mut castle.economic.power_timestamps, 0);
+                let benefit = math::divide_and_round_up((middle.timestamp - start.timestamp) * start.total_power, 60u64 * 1000u64);
+                castle.economic.treasury = castle.economic.treasury + benefit;
+                start = middle;
+            };
+
+            let current_total_power = get_castle_total_economic_power(castle);
+            let current_timestamp = clock::timestamp_ms(clock);
+            let benefit = math::divide_and_round_up((current_timestamp - start.timestamp) * start.total_power, 60u64 * 1000u64);
+            castle.economic.treasury = castle.economic.treasury + benefit;
+            vector::push_back(&mut castle.economic.power_timestamps, EconomicPowerTimestamp {
+                total_power: current_total_power, 
+                timestamp: current_timestamp,
+            });
+        };
     }
 
 
