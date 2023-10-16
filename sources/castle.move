@@ -9,6 +9,7 @@ module move_castle::castle {
     use std::vector;
     use move_castle::utils;
     use sui::event;
+    use sui::math;
     use sui::table::{Table, Self};
 
     struct Castle has key, store {
@@ -69,9 +70,9 @@ module move_castle::castle {
     /// Castle size factor - small
     const CASTLE_SIZE_FACTOR_SMALL : u64 = 2;
     /// Castle size factor - middle
-    const CASTLE_SIZE_FACTOR_MIDDLE : u64 = 2;
+    const CASTLE_SIZE_FACTOR_MIDDLE : u64 = 3;
     /// Castle size factor - big
-    const CASTLE_SIZE_FACTOR_BIG : u64 = 2;
+    const CASTLE_SIZE_FACTOR_BIG : u64 = 5;
 
     /// Initial attack power - human castle
     const INITIAL_ATTCK_POWER_HUMAN : u64 = 1000;
@@ -123,7 +124,6 @@ module move_castle::castle {
         let race = get_castle_race(serial_number);
         let (attack_power, defence_power) = get_initial_attack_defence_power(race);
     
-
         let castle = Castle {
             id: obj_id,
             name: string::utf8(name_bytes),
@@ -205,7 +205,34 @@ module move_castle::castle {
 
         if (castle.level > initial_level) {
             event::emit(CastleUpgraded{id: object::uid_to_inner(&castle.id), level: castle.level});
+            let (attack_power, defence_power) = calculate_castle_base_attack_defence_power(freeze(castle));
+            castle.attack_power = attack_power;
+            castle.defence_power = defence_power;
         }
+    }
+
+    /// Calculate castle's base attack power and base defence power based on level
+    /// base attack power = (castle_size_factor * initial_attack_power * (1.2 ^ (level - 1)))
+    /// base defence power = (castle_size_factor * initial_defence_power * (1.2 ^ (level - 1)))
+    fun calculate_castle_base_attack_defence_power(castle: &Castle): (u64, u64) {
+        let castle_size_factor = get_castle_size_factor(castle.serial_number);
+        let (initial_attack, initial_defence) = get_initial_attack_defence_power(get_castle_race(castle.serial_number));
+        let attack_power = math::divide_and_round_up(castle_size_factor * initial_attack * math::pow(12, ((castle.level - 1) as u8)), 100);
+        let defence_power = math::divide_and_round_up(castle_size_factor * initial_defence * math::pow(12, ((castle.level - 1) as u8)), 100);
+        (attack_power, defence_power)
+    }
+
+    /// Get castle size factor
+    fun get_castle_size_factor(serial_number: u64): u64 {
+        let castle_size = get_castle_size(serial_number);
+        let factor = CASTLE_SIZE_FACTOR_SMALL;
+        if (castle_size == CASTLE_SIZE_MIDDLE) {
+            factor = CASTLE_SIZE_FACTOR_MIDDLE;
+        };
+        if (castle_size == CASTLE_SIZE_BIG) {
+            factor = CASTLE_SIZE_FACTOR_BIG;
+        };
+        factor
     }
 
     /// Settle castle's treasury, including victory rewards and defeat penalties
