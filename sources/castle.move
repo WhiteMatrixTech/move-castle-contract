@@ -21,7 +21,7 @@ module move_castle::castle {
         defence_power: u64,
         experience_pool: u64,
         economic: Economic,
-        solders: u64,
+        soldiers: u64,
     }
 
     struct Economic has store {
@@ -96,6 +96,30 @@ module move_castle::castle {
     /// Initial defence power - undead castle
     const INITIAL_DEFENCE_POWER_UNDEAD : u64 = 1200;
 
+    /// Soldier attack power - human
+    const SOLDIER_ATTACK_POWER_HUMAN : u64 = 100;
+    /// Soldier defence power - human
+    const SOLDIER_DEFENCE_POWER_HUMAN : u64 = 100;
+    /// Soldier attack power - elf
+    const SOLDIER_ATTACK_POWER_ELF : u64 = 50;
+    /// Soldier defence power - elf
+    const SOLDIER_DEFENCE_POWER_ELF : u64 = 150;
+    /// Soldier attack power - orcs
+    const SOLDIER_ATTACK_POWER_ORCS : u64 = 150;
+    /// Soldier defence power - orcs
+    const SOLDIER_DEFENCE_POWER_ORCS : u64 = 50;
+    /// Soldier attack power - goblin
+    const SOLDIER_ATTACK_POWER_GOBLIN : u64 = 120;
+    /// Soldier defence power - goblin
+    const SOLDIER_DEFENCE_POWER_GOBLIN : u64 = 80;
+    /// Soldier attack power - undead
+    const SOLDIER_ATTACK_POWER_UNDEAD : u64 = 120;
+    /// Soldier defence power - undead
+    const SOLDIER_DEFENCE_POWER_UNDEAD : u64 = 80;
+
+    /// Soldier economic power
+    const SOLDIER_ECONOMIC_POWER : u64 = 1;
+
     /// Experience points required for castle level 2 - 10
     const REQUIRED_EXP_LEVELS : vector<u64> = vector[100, 150, 225, 338, 507, 760, 1140, 1709, 2563];
     
@@ -133,7 +157,7 @@ module move_castle::castle {
             defence_power: defence_power,
             experience_pool: 0,
             economic: castle_economic,
-            solders: 10,
+            soldiers: 10,
         };
         
         let owner = tx_context::sender(ctx);
@@ -181,6 +205,44 @@ module move_castle::castle {
     /// Get castle size
     public fun get_castle_size(serial_number: u64): u64 {
         serial_number / 10000000
+    }
+
+    /// Castle's base attack power plus castle's all soldiers' attack power
+    public fun get_castle_total_attack_power(castle: &Castle): u64 {
+        let race = get_castle_race(castle.serial_number);
+        let soldier_attack_power = SOLDIER_ATTACK_POWER_HUMAN;
+        if (race == CASTLE_RACE_ELF) {
+            soldier_attack_power = SOLDIER_ATTACK_POWER_ELF;
+        };
+        if (race == CASTLE_RACE_ORCS) {
+            soldier_attack_power = SOLDIER_ATTACK_POWER_ORCS;
+        };
+        if (race == CASTLE_RACE_GOBLIN) {
+            soldier_attack_power = SOLDIER_ATTACK_POWER_GOBLIN;
+        };
+        if (race == CASTLE_RACE_UNDEAD) {
+            soldier_attack_power = SOLDIER_ATTACK_POWER_UNDEAD;
+        };
+        castle.attack_power + castle.soldiers * soldier_attack_power
+    }
+
+    /// Castle's base defence power plus castle's all soldiers' defence power
+    public fun get_castle_total_defence_power(castle: &Castle): u64 {
+        let race = get_castle_race(castle.serial_number);
+        let soldier_defence_power = SOLDIER_DEFENCE_POWER_HUMAN;
+        if (race == CASTLE_RACE_ELF) {
+            soldier_defence_power = SOLDIER_DEFENCE_POWER_ELF;
+        };
+        if (race == CASTLE_RACE_ORCS) {
+            soldier_defence_power = SOLDIER_DEFENCE_POWER_ORCS;
+        };
+        if (race == CASTLE_RACE_GOBLIN) {
+            soldier_defence_power = SOLDIER_DEFENCE_POWER_GOBLIN;
+        };
+        if (race == CASTLE_RACE_UNDEAD) {
+            soldier_defence_power = SOLDIER_DEFENCE_POWER_UNDEAD;
+        };
+        castle.attack_power + castle.soldiers * soldier_defence_power
     }
 
     /// Consume experience points from the experience pool to upgrade the castle
@@ -254,14 +316,14 @@ module move_castle::castle {
 
     /// Castle uses treasury to recruit soldiers
     public entry fun recruit_soldiers (castle: &mut Castle, count: u64, ctx: &mut TxContext) {
-        let final_soldiers = castle.solders + count;
+        let final_soldiers = castle.soldiers + count;
         assert!(final_soldiers <= get_castle_soldier_limit(castle.serial_number), E_SOLDIERS_EXCEED_LIMIT);
 
         let total_soldier_price = SOLDIER_PRICE * count;
         assert!(castle.economic.treasury >= total_soldier_price, E_INSUFFICIENT_TREASURY_FOR_SOLDIERS);
 
         castle.economic.treasury = castle.economic.treasury - total_soldier_price;
-        castle.solders = final_soldiers;
+        castle.soldiers = final_soldiers;
     }
 
     #[test_only]
