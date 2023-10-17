@@ -220,6 +220,11 @@ module move_castle::castle {
         castle.level
     }
 
+    /// Get castle soldiers
+    public fun get_castle_soldiers(castle: &Castle): u64 {
+        castle.soldiers
+    }
+
     /// Get castle serial number
     public fun get_castle_serial_number(castle: &Castle): u64 {
         castle.serial_number
@@ -352,6 +357,16 @@ module move_castle::castle {
         factor
     }
 
+    /// Everytime castle's economic power mutates, need to mark economic mutate timestamp
+    fun mutate_castle_economy(castle: &mut Castle, clock: &Clock) {
+        let current_total_power = get_castle_total_economic_power(castle);
+        let current_timestamp = clock::timestamp_ms(clock);
+        vector::push_back(&mut castle.economic.power_timestamps, EconomicPowerTimestamp {
+            total_power: current_total_power, 
+            timestamp: current_timestamp,
+        });
+    }
+
     /// Settle castle's treasury, including victory rewards and defeat penalties
     public entry fun settle_castle_treasury(castle: &mut Castle, clock: &Clock, ctx: &mut TxContext) {
         // 1. TODO find the castle's economic mutate times in battle results
@@ -397,7 +412,7 @@ module move_castle::castle {
     }
 
     /// Castle uses treasury to recruit soldiers
-    public entry fun recruit_soldiers (castle: &mut Castle, count: u64, ctx: &mut TxContext) {
+    public entry fun recruit_soldiers (castle: &mut Castle, count: u64, clock: &Clock, ctx: &mut TxContext) {
         let final_soldiers = castle.soldiers + count;
         assert!(final_soldiers <= get_castle_soldier_limit(castle.serial_number), E_SOLDIERS_EXCEED_LIMIT);
 
@@ -406,6 +421,8 @@ module move_castle::castle {
 
         castle.economic.treasury = castle.economic.treasury - total_soldier_price;
         castle.soldiers = final_soldiers;
+
+        mutate_castle_economy(castle, clock);
     }
 
     #[test_only]
@@ -443,6 +460,14 @@ module move_castle::castle {
     #[test_only]
     public fun get_castle_exp(castle: &Castle): u64 {
         castle.experience_pool
+    }
+
+    public entry fun test_only_set_castle_exp(castle: &mut Castle, exp: u64, ctx: &mut TxContext) {
+        castle.experience_pool = exp;
+    }
+
+    public entry fun test_only_set_castle_treasury(castle: &mut Castle, treasury: u64, ctx: &mut TxContext) {
+        castle.economic.treasury = treasury;
     }
 
 }
