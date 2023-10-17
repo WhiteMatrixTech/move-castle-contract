@@ -425,6 +425,11 @@ module move_castle::castle {
         mutate_castle_economy(castle, clock);
     }
 
+    /// Add castle's treasury directly
+    public fun add_castle_treasury(castle: &mut Castle, treasury: u64) {
+        castle.economic.treasury = castle.economic.treasury + treasury;
+    }
+
     #[test_only]
     /// Only for test
     public fun test_update_castle(castle: &mut Castle) {
@@ -435,11 +440,6 @@ module move_castle::castle {
     #[test_only]
     public fun add_castle_exp(castle: &mut Castle, exp: u64) {
         castle.experience_pool = castle.experience_pool + exp;
-    }
-
-    #[test_only]
-    public fun add_castle_treasury(castle: &mut Castle, treasury: u64) {
-        castle.economic.treasury = castle.economic.treasury + treasury;
     }
 
     #[test_only]
