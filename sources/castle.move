@@ -8,6 +8,7 @@ module move_castle::castle {
     use std::string::{Self, String};
     use std::vector;
     use move_castle::utils;
+    use move_castle::castle_admin::{Self, GameStore};
     use sui::event;
     use sui::math;
     use sui::table::{Table, Self};
@@ -147,7 +148,7 @@ module move_castle::castle {
     const E_SOLDIERS_EXCEED_LIMIT : u64 = 1;
 
     /// Create new castle
-    public entry fun build_castle(size: u64, name_bytes: vector<u8>, clock: &Clock, ctx: &mut TxContext) {
+    public entry fun build_castle(size: u64, name_bytes: vector<u8>, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
         let castle_economic = Economic {
             treasury: 0,
             base_power: get_initial_economic_power(size),
@@ -182,6 +183,17 @@ module move_castle::castle {
         
         let owner = tx_context::sender(ctx);
         event::emit(CastleBuilt{id: object::uid_to_inner(&castle.id), owner: owner});
+        
+        if (is_castle_small(&castle)) {
+            castle_admin::record_small_castle(game_store, object::id(&castle));
+        };
+        if (is_castle_middle(&castle)) {
+            castle_admin::record_middle_castle(game_store, object::id(&castle));
+        };
+        if (is_castle_big(&castle)) {
+            castle_admin::record_big_castle(game_store, object::id(&castle));
+        };
+
         transfer::public_transfer(castle, owner);
     }
 
@@ -215,6 +227,11 @@ module move_castle::castle {
         power
     }
 
+    /// Get castle ID
+    public fun get_castle_id(castle: &Castle): ID {
+        object::uid_to_inner(&castle.id)
+    }
+
     /// Get castle level
     public fun get_castle_level(castle: &Castle): u64 {
         castle.level
@@ -240,8 +257,23 @@ module move_castle::castle {
     }
 
     /// Get castle size
-    public fun get_castle_size(serial_number: u64): u64 {
+    fun get_castle_size(serial_number: u64): u64 {
         serial_number / 10000000
+    }
+
+    /// Is castle small
+    public fun is_castle_small(castle: &Castle): bool {
+        get_castle_size(castle.serial_number) == CASTLE_SIZE_SMALL
+    }
+
+    /// Is castle middle
+    public fun is_castle_middle(castle: &Castle): bool {
+        get_castle_size(castle.serial_number) == CASTLE_SIZE_MIDDLE
+    }
+
+    /// Is castle big
+    public fun is_castle_big(castle: &Castle): bool {
+        get_castle_size(castle.serial_number) == CASTLE_SIZE_BIG
     }
 
     /// Castle's base attack power plus castle's all soldiers' attack power

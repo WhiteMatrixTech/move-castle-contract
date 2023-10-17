@@ -1,12 +1,20 @@
 module move_castle::castle_admin {
     use sui::transfer;
-    use sui::object::{Self, UID};
+    use sui::object::{Self, UID, ID};
     use sui::tx_context::{Self, TxContext};
-    use move_castle::castle::{Self, Castle};
+    use std::vector;
 
     /// Capability to modify game settings
     struct AdminCap has key {
         id: UID
+    }
+
+    /// Holding game info
+    struct GameStore has key, store {
+        id: UID,
+        small_castles: vector<ID>,
+        middle_castles: vector<ID>,
+        big_castles: vector<ID>
     }
 
     /// Module initializer create the only one AdminCap and send it to the publisher
@@ -14,11 +22,27 @@ module move_castle::castle_admin {
         transfer::transfer(
             AdminCap{id: object::new(ctx)},
             tx_context::sender(ctx)
-        )
+        );
+
+        transfer::share_object(
+            GameStore{
+                id: object::new(ctx),
+                small_castles: vector::empty<ID>(),
+                middle_castles: vector::empty<ID>(),
+                big_castles: vector::empty<ID>()
+            }
+        );
     }
 
-    /// Only the owner of the AdminCap can call this function to distribute treasury rewards
-    public entry fun distribute_treasury_rewards(_: &AdminCap, amount: u64, castle: &mut Castle, ctx: &mut TxContext) {
-        castle::add_castle_treasury(castle, amount);
+    public fun record_small_castle(game_store: &mut GameStore, id: ID) {
+        vector::push_back(&mut game_store.small_castles, id);
+    }
+
+    public fun record_middle_castle(game_store: &mut GameStore, id: ID) {
+        vector::push_back(&mut game_store.middle_castles, id);
+    }
+
+    public fun record_big_castle(game_store: &mut GameStore, id: ID) {
+        vector::push_back(&mut game_store.big_castles, id);
     }
 }
