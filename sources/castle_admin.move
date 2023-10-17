@@ -45,4 +45,20 @@ module move_castle::castle_admin {
     public fun record_big_castle(game_store: &mut GameStore, id: ID) {
         vector::push_back(&mut game_store.big_castles, id);
     }
+
+    #[test_only]
+    public fun create_game_store_for_test(ctx: &mut TxContext): GameStore{
+            GameStore{
+                id: object::new(ctx),
+                small_castles: vector::empty<ID>(),
+                middle_castles: vector::empty<ID>(),
+                big_castles: vector::empty<ID>()
+            }
+    }
+
+    #[test_only]
+    public fun destroy_game_store_for_test(game_store: GameStore) {
+        let GameStore {id, small_castles, middle_castles, big_castles: _} = game_store;
+        object::delete(id);
+    }
 }

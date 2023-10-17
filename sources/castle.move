@@ -12,6 +12,7 @@ module move_castle::castle {
     use sui::event;
     use sui::math;
     use sui::table::{Table, Self};
+    use sui::dynamic_field;
 
     struct Castle has key, store {
         id: UID,
@@ -23,6 +24,7 @@ module move_castle::castle {
         experience_pool: u64,
         economic: Economic,
         soldiers: u64,
+        has_battle_ticket: bool,
     }
 
     struct Economic has store {
@@ -171,6 +173,7 @@ module move_castle::castle {
             experience_pool: 0,
             economic: castle_economic,
             soldiers: 10,
+            has_battle_ticket: false
         };
 
         let total_economic_power = get_castle_total_economic_power(&castle);
@@ -460,6 +463,18 @@ module move_castle::castle {
     /// Add castle's treasury directly
     public fun add_castle_treasury(castle: &mut Castle, treasury: u64) {
         castle.economic.treasury = castle.economic.treasury + treasury;
+    }
+
+    public fun has_battle_ticket(castle: &Castle): bool {
+        castle.has_battle_ticket
+    }
+
+    public fun add_dynamic_field<T: store>(castle: &mut Castle, name: vector<u8>, field: T) {
+        dynamic_field::add(&mut castle.id, name, field);
+    }
+
+    public fun remove_dynamic_field<T: store>(castle: &mut Castle, name: vector<u8>) : T{
+        dynamic_field::remove(&mut castle.id, name)
     }
 
     #[test_only]
