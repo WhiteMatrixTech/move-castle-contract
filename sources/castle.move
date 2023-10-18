@@ -28,11 +28,6 @@ module move_castle::castle {
         owner: address,
     }
 
-    /// Event - castle upgraded
-    struct CastleUpgraded has copy, drop {
-        id: ID,
-        level: u64,
-    }
 
     /// Create new castle
     public entry fun build_castle(size: u64, name_bytes: vector<u8>, desc_bytes: vector<u8>, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
@@ -105,42 +100,6 @@ module move_castle::castle {
     /// Max soldier count per castle - big castle
     const MAX_SOLDIERS_BIG_CASTLE : u64 = 2000;
 
-    /// Castle size factor - small
-    const CASTLE_SIZE_FACTOR_SMALL : u64 = 2;
-    /// Castle size factor - middle
-    const CASTLE_SIZE_FACTOR_MIDDLE : u64 = 3;
-    /// Castle size factor - big
-    const CASTLE_SIZE_FACTOR_BIG : u64 = 5;
-
-    /// Initial attack power - human castle
-    const INITIAL_ATTCK_POWER_HUMAN : u64 = 1000;
-    /// Initial attack power - elf castle
-    const INITIAL_ATTCK_POWER_ELF : u64 = 500;
-    /// Initial attack power - orcs castle
-    const INITIAL_ATTCK_POWER_ORCS : u64 = 1500;
-    /// Initial attack power - goblin castle
-    const INITIAL_ATTCK_POWER_GOBLIN : u64 = 1200;
-    /// Initial attack power - undead castle
-    const INITIAL_ATTCK_POWER_UNDEAD : u64 = 800;
-
-    /// Initial defence power - human castle
-    const INITIAL_DEFENCE_POWER_HUMAN : u64 = 1000;
-    /// Initial defence power - elf castle
-    const INITIAL_DEFENCE_POWER_ELF : u64 = 1500;
-    /// Initial defence power - orcs castle
-    const INITIAL_DEFENCE_POWER_ORCS : u64 = 500;
-    /// Initial defence power - goblin castle
-    const INITIAL_DEFENCE_POWER_GOBLIN : u64 = 800;
-    /// Initial defence power - undead castle
-    const INITIAL_DEFENCE_POWER_UNDEAD : u64 = 1200;
-
-    /// Initial economic power - small castle
-    const INITIAL_ECONOMIC_POWER_SMALL_CASTLE : u64 = 100;
-    /// Initial economic power - middle castle
-    const INITIAL_ECONOMIC_POWER_MIDDLE_CASTLE : u64 = 150;
-    /// Initial economic power - big castle
-    const INITIAL_ECONOMIC_POWER_BIG_CASTLE : u64 = 250;
-
     /// Soldier attack power - human
     const SOLDIER_ATTACK_POWER_HUMAN : u64 = 100;
     /// Soldier defence power - human
@@ -162,9 +121,6 @@ module move_castle::castle {
     /// Soldier defence power - undead
     const SOLDIER_DEFENCE_POWER_UNDEAD : u64 = 80;
 
-    /// Soldier economic power
-    const SOLDIER_ECONOMIC_POWER : u64 = 1;
-
     /// Experience points required for castle level 2 - 10
     const REQUIRED_EXP_LEVELS : vector<u64> = vector[100, 150, 225, 338, 507, 760, 1140, 1709, 2563];
     
@@ -178,25 +134,6 @@ module move_castle::castle {
     const E_INSUFFICIENT_TREASURY_FOR_SOLDIERS : u64 = 0;
     /// Error - soldiers exceed limit
     const E_SOLDIERS_EXCEED_LIMIT : u64 = 1;
-
-
-    /// Get initial attack power and defence power by race
-    fun get_initial_attack_defence_power(race: u64): (u64, u64) {
-        let (attack, defence) = (INITIAL_ATTCK_POWER_HUMAN, INITIAL_DEFENCE_POWER_HUMAN);
-        if (race == CASTLE_RACE_ELF) {
-            (attack, defence) = (INITIAL_ATTCK_POWER_ELF, INITIAL_DEFENCE_POWER_ELF);
-        };
-        if (race == CASTLE_RACE_ORCS) {
-            (attack, defence) = (INITIAL_ATTCK_POWER_ORCS, INITIAL_DEFENCE_POWER_ORCS);
-        };
-        if (race == CASTLE_RACE_GOBLIN) {
-            (attack, defence) = (INITIAL_ATTCK_POWER_GOBLIN, INITIAL_DEFENCE_POWER_GOBLIN);
-        };
-        if (race == CASTLE_RACE_UNDEAD) {
-            (attack, defence) = (INITIAL_ATTCK_POWER_UNDEAD, INITIAL_DEFENCE_POWER_UNDEAD);
-        };
-        (attack, defence)
-    }
 
     // Get initial economic power by castle size
     fun get_initial_economic_power(size: u64): u64 {
@@ -322,45 +259,6 @@ module move_castle::castle {
 
     
 
-    fun calculate_castle_economic_power(castle: &Castle): (u64, u64) {
-        let size = get_castle_size(castle.serial_number);
-        let initial_base_power = INITIAL_ECONOMIC_POWER_SMALL_CASTLE;
-        if (size == CASTLE_SIZE_MIDDLE) {
-            initial_base_power = INITIAL_ECONOMIC_POWER_MIDDLE_CASTLE;
-        };
-        if (size == CASTLE_SIZE_BIG) {
-            initial_base_power = INITIAL_ECONOMIC_POWER_BIG_CASTLE;
-        };
-
-        let level = get_castle_level(castle);
-        let base_power = math::divide_and_round_up(initial_base_power * math::pow(12, ((level - 1) as u8)), 100);
-        let total_power = base_power + castle.soldiers * SOLDIER_ECONOMIC_POWER;
-        (base_power, total_power)
-    }
-
-    /// Calculate castle's base attack power and base defence power based on level
-    /// base attack power = (castle_size_factor * initial_attack_power * (1.2 ^ (level - 1)))
-    /// base defence power = (castle_size_factor * initial_defence_power * (1.2 ^ (level - 1)))
-    fun calculate_castle_base_attack_defence_power(castle: &Castle): (u64, u64) {
-        let castle_size_factor = get_castle_size_factor(castle.serial_number);
-        let (initial_attack, initial_defence) = get_initial_attack_defence_power(get_castle_race(castle.serial_number));
-        let attack_power = math::divide_and_round_up(castle_size_factor * initial_attack * math::pow(12, ((castle.level - 1) as u8)), 100);
-        let defence_power = math::divide_and_round_up(castle_size_factor * initial_defence * math::pow(12, ((castle.level - 1) as u8)), 100);
-        (attack_power, defence_power)
-    }
-
-    /// Get castle size factor
-    fun get_castle_size_factor(serial_number: u64): u64 {
-        let castle_size = get_castle_size(serial_number);
-        let factor = CASTLE_SIZE_FACTOR_SMALL;
-        if (castle_size == CASTLE_SIZE_MIDDLE) {
-            factor = CASTLE_SIZE_FACTOR_MIDDLE;
-        };
-        if (castle_size == CASTLE_SIZE_BIG) {
-            factor = CASTLE_SIZE_FACTOR_BIG;
-        };
-        factor
-    }
 
     /// Everytime castle's economic power mutates, need to mark economic mutate timestamp
     fun mutate_castle_economy(castle: &mut Castle, clock: &Clock) {
