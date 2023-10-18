@@ -1,4 +1,3 @@
-#[allow(unused_variable)]
 module move_castle::castle {
 
     use sui::object::{Self, UID, ID};
@@ -8,10 +7,7 @@ module move_castle::castle {
     use std::string::{Self, String};
     use std::vector;
     use sui::event;
-    use sui::math;
-    use sui::table::{Table, Self};
-    use sui::dynamic_field;
-    
+
     use move_castle::utils;
     use move_castle::core::{Self, GameStore};
 
@@ -33,9 +29,6 @@ module move_castle::castle {
 
         let obj_id = object::new(ctx);
         let serial_number = utils::generate_castle_serial_number(size, &mut obj_id);
-
-        let race = get_castle_race(serial_number);
-        let (attack_power, defence_power) = get_initial_attack_defence_power(race);
     
         let castle = Castle {
             id: obj_id,
@@ -44,16 +37,12 @@ module move_castle::castle {
             serial_number: serial_number,
         };
 
-        let total_economic_power = get_castle_total_economic_power(&castle);
         let id = object::uid_to_inner(&castle.id);
+        let race = get_castle_race(serial_number);
         core::new_castle(
             id, 
             size,
             race,
-            attack_power,
-            defence_power,
-            get_initial_economic_power(size),
-            total_economic_power,
             clock::timestamp_ms(clock),
             game_store
         );
@@ -79,54 +68,6 @@ module move_castle::castle {
         core::recruit_soldiers(object::id(castle), count, clock, game_store);
     }
 
-
-    /// Max soldier count per castle - small castle
-    const MAX_SOLDIERS_SMALL_CASTLE : u64 = 500;
-    /// Max soldier count per castle - middle castle
-    const MAX_SOLDIERS_MIDDLE_CASTLE : u64 = 1000;
-    /// Max soldier count per castle - big castle
-    const MAX_SOLDIERS_BIG_CASTLE : u64 = 2000;
-
-    /// Soldier attack power - human
-    const SOLDIER_ATTACK_POWER_HUMAN : u64 = 100;
-    /// Soldier defence power - human
-    const SOLDIER_DEFENCE_POWER_HUMAN : u64 = 100;
-    /// Soldier attack power - elf
-    const SOLDIER_ATTACK_POWER_ELF : u64 = 50;
-    /// Soldier defence power - elf
-    const SOLDIER_DEFENCE_POWER_ELF : u64 = 150;
-    /// Soldier attack power - orcs
-    const SOLDIER_ATTACK_POWER_ORCS : u64 = 150;
-    /// Soldier defence power - orcs
-    const SOLDIER_DEFENCE_POWER_ORCS : u64 = 50;
-    /// Soldier attack power - goblin
-    const SOLDIER_ATTACK_POWER_GOBLIN : u64 = 120;
-    /// Soldier defence power - goblin
-    const SOLDIER_DEFENCE_POWER_GOBLIN : u64 = 80;
-    /// Soldier attack power - undead
-    const SOLDIER_ATTACK_POWER_UNDEAD : u64 = 120;
-    /// Soldier defence power - undead
-    const SOLDIER_DEFENCE_POWER_UNDEAD : u64 = 80;
-
-    /// Experience points required for castle level 2 - 10
-    const REQUIRED_EXP_LEVELS : vector<u64> = vector[100, 150, 225, 338, 507, 760, 1140, 1709, 2563];
-    
-    /// Max castle level
-    const MAX_CASTLE_LEVEL : u64 = 10;
-
-
-    // Get initial economic power by castle size
-    fun get_initial_economic_power(size: u64): u64 {
-        let power = INITIAL_ECONOMIC_POWER_SMALL_CASTLE;
-        if (size == CASTLE_SIZE_MIDDLE) {
-            power = INITIAL_ECONOMIC_POWER_MIDDLE_CASTLE;
-        };
-        if (size == CASTLE_SIZE_BIG) {
-            power = INITIAL_ECONOMIC_POWER_BIG_CASTLE;
-        };
-        power
-    }
-
     /// Get castle race
     public fun get_castle_race(serial_number: u64): u64 {
         let race_number = serial_number / 10 % 10;
@@ -134,168 +75,6 @@ module move_castle::castle {
             race_number = race_number - 5;
         };
         race_number
-    }
-
-    /// Get castle battle cooldown
-    public fun get_castle_battle_cooldown(castle: &Castle): u64 {
-        castle.battle_cooldown
-    }
-
-    /// Castle's base attack power plus castle's all soldiers' attack power
-    public fun get_castle_total_attack_power(castle: &Castle): u64 {
-        let (soldiers_attack_power, _) = get_castle_soldiers_attack_defence_power(castle);
-        castle.attack_power + soldiers_attack_power
-    }
-
-    /// Castle's base defence power plus castle's all soldiers' defence power
-    public fun get_castle_total_defence_power(castle: &Castle): u64 {
-        let (_, soldiers_defence_power) = get_castle_soldiers_attack_defence_power(castle);
-        castle.defence_power + soldiers_defence_power
-    }
-
-    /// Castle's soldiers' attack power and defence power
-    fun get_castle_soldiers_attack_defence_power(castle: &Castle): (u64, u64) {
-        let (soldier_attack_power, soldier_defence_power) = get_castle_soldier_attack_defence_power(castle);
-        (castle.soldiers * soldier_attack_power, castle.soldiers * soldier_defence_power)
-    }
-
-     /// Castle's single soldier's attack power and defence power
-    public fun get_castle_soldier_attack_defence_power(castle: &Castle): (u64, u64) {
-        let race = get_castle_race(castle.serial_number);
-
-        let soldier_attack_power;
-        let soldier_defence_power;
-        if (race == CASTLE_RACE_HUMAN) {
-            soldier_attack_power = SOLDIER_ATTACK_POWER_HUMAN;
-            soldier_defence_power = SOLDIER_DEFENCE_POWER_HUMAN;
-        } else if (race == CASTLE_RACE_ELF) {
-            soldier_attack_power = SOLDIER_ATTACK_POWER_ELF;
-            soldier_defence_power = SOLDIER_DEFENCE_POWER_ELF;
-        } else if (race == CASTLE_RACE_ORCS) {
-            soldier_attack_power = SOLDIER_ATTACK_POWER_ORCS;
-            soldier_defence_power = SOLDIER_DEFENCE_POWER_ORCS;
-        } else if (race == CASTLE_RACE_GOBLIN) {
-            soldier_attack_power = SOLDIER_ATTACK_POWER_GOBLIN;
-            soldier_defence_power = SOLDIER_DEFENCE_POWER_GOBLIN;
-        } else if (race == CASTLE_RACE_UNDEAD) {
-            soldier_attack_power = SOLDIER_ATTACK_POWER_UNDEAD;
-            soldier_defence_power = SOLDIER_DEFENCE_POWER_UNDEAD;
-        } else {
-            abort 0
-        };
-
-        (soldier_attack_power, soldier_defence_power)
-    }
-
-    /// Castle's base economic power plus castle's all soldier's economic power
-    public fun get_castle_total_economic_power(castle: &Castle): u64 {
-        castle.economic.base_power + castle.soldiers * SOLDIER_ECONOMIC_POWER
-    }
-
-    /// Castle's base economic power 
-    public fun get_castle_base_economic_power(castle: &Castle): u64 {
-        castle.economic.base_power
-    }
-
-    /// Everytime castle's economic power mutates, need to mark economic mutate timestamp
-    fun mutate_castle_economy(castle: &mut Castle, clock: &Clock) {
-        let current_total_power = get_castle_total_economic_power(castle);
-        let current_timestamp = clock::timestamp_ms(clock);
-        vector::push_back(&mut castle.economic.power_timestamps, EconomicPowerTimestamp {
-            total_power: current_total_power, 
-            timestamp: current_timestamp,
-        });
-    }
-
-    /// Get castle soldier limit by castle size
-    fun get_castle_soldier_limit(serial_number: u64) : u64 {
-        let size = get_castle_size(serial_number);
-        let soldier_limit = MAX_SOLDIERS_SMALL_CASTLE;
-        if (size == CASTLE_SIZE_MIDDLE) {
-            soldier_limit = MAX_SOLDIERS_MIDDLE_CASTLE;
-        };
-        if (size == CASTLE_SIZE_BIG) {
-            soldier_limit = MAX_SOLDIERS_BIG_CASTLE;
-        };
-        soldier_limit
-    }
-
-    /// Add castle's treasury directly
-    public fun add_castle_treasury(castle: &mut Castle, treasury: u64) {
-        castle.economic.treasury = castle.economic.treasury + treasury;
-    }
-
-    public fun has_battle_ticket(castle: &Castle): bool {
-        castle.has_battle_ticket
-    }
-
-    public fun soldiers_survived(castle: &mut Castle, soldier_count: u64, clock: &Clock) {
-        castle.soldiers = soldier_count;
-        mutate_castle_economy(castle, clock);
-    }
-
-    public fun has_race_advantage(c1: &Castle, c2: &Castle): bool {
-        let c1_race = get_castle_race(c1.serial_number);
-        let c2_race = get_castle_race(c2.serial_number);
-
-        let has;
-        if (c1_race == c2_race) {
-            has = false;
-        } else if (c1_race < c2_race) {
-            has = (c2_race - c1_race) == 1;
-        } else {
-            has = (c1_race - c2_race) == 4;
-        };
-
-        has
-    }
-
-    public fun add_dynamic_field<T: store>(castle: &mut Castle, name: vector<u8>, field: T) {
-        dynamic_field::add(&mut castle.id, name, field);
-    }
-
-    public fun remove_dynamic_field<T: store>(castle: &mut Castle, name: vector<u8>) : T{
-        dynamic_field::remove(&mut castle.id, name)
-    }
-
-    #[test_only]
-    /// Only for test
-    public fun test_update_castle(castle: &mut Castle) {
-        castle.experience_pool = castle.experience_pool + 10;
-        castle.economic.treasury = castle.economic.treasury + 10;
-    }
-
-    #[test_only]
-    public fun add_castle_exp(castle: &mut Castle, exp: u64) {
-        castle.experience_pool = castle.experience_pool + exp;
-    }
-
-    #[test_only]
-    public fun set_castle_level(castle: &mut Castle, level: u64) {
-        castle.level = level;
-    }
-
-    #[test_only]
-    public fun set_castle_exp(castle: &mut Castle, exp: u64) {
-        castle.experience_pool = exp;
-    }
-
-    #[test_only]
-    public fun set_castle_treasury(castle: &mut Castle, treasury: u64) {
-        castle.economic.treasury = treasury;
-    }
-
-    #[test_only]
-    public fun get_castle_exp(castle: &Castle): u64 {
-        castle.experience_pool
-    }
-
-    public entry fun test_only_set_castle_exp(castle: &mut Castle, exp: u64, ctx: &mut TxContext) {
-        castle.experience_pool = exp;
-    }
-
-    public entry fun test_only_set_castle_treasury(castle: &mut Castle, treasury: u64, ctx: &mut TxContext) {
-        castle.economic.treasury = treasury;
     }
 
 }

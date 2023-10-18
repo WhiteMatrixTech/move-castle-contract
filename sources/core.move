@@ -1,9 +1,12 @@
-module move_castle::castle_admin {
+module move_castle::core {
+    use std::vector;
     use sui::transfer;
     use sui::object::{Self, UID, ID};
     use sui::tx_context::{Self, TxContext};
-    use std::vector;
+    use sui::clock::{Self, Clock};
     use sui::table;
+    use sui::math;
+    use sui::event;
     use move_castle::utils;
 
     /// Capability to modify game settings
@@ -15,10 +18,9 @@ module move_castle::castle_admin {
     struct GameStore has key, store {
         id: UID,
         small_castle_count: u64,
-        middle_castles_count: u64,
-        big_castles_count: u64,
+        middle_castle_count: u64,
+        big_castle_count: u64,
         castles: table::Table<ID, CastleData>
-        battle_field: table::Table<ID, CastleBattleBadge>
     }
 
     /// Holding castle info
@@ -29,11 +31,11 @@ module move_castle::castle_admin {
         attack_power: u64,
         defence_power: u64,
         soldiers: u64,
-        expirence_pool: u64,
+        experience_pool: u64,
         economy: Economy,
     }
 
-    struct Economy {
+    struct Economy has store {
         treasury: u64,
         base_power: u64,
         settle_time: u64,
@@ -46,20 +48,6 @@ module move_castle::castle_admin {
         power: u64,
         start: u64,
         end: u64
-    }
-
-    /// Holding a castle's battle info
-    struct CastleBattleBadge has store, drop {
-        cooldown: u64,
-        unsettled_soldier_lost: u64,
-        unsettled_economic_reparation: vector<EconomicReparation>
-    }
-
-    struct EconomicReparation has store, drop {
-        recipient: bool,
-        economic_power: u64,
-        start_time: u64,
-        end_time: u64
     }
 
     /// Event - castle upgraded
@@ -79,10 +67,9 @@ module move_castle::castle_admin {
             GameStore{
                 id: object::new(ctx),
                 small_castle_count: 0,
-                middle_castles_count: 0,
-                big_castles_count: 0,
+                middle_castle_count: 0,
+                big_castle_count: 0,
                 castles: table::new<ID, CastleData>(ctx)
-                battle_field: table::new<ID, CastleBattleBadge>(ctx)
             }
         );
     }
@@ -90,12 +77,10 @@ module move_castle::castle_admin {
     public fun new_castle(id: ID,
                             size: u64,
                             race: u64,
-                            attack_power: u64,
-                            defence_power: u64,
-                            base_economic_power: u64,
                             current_timestamp: u64,
                             game_store: &mut GameStore) {
 
+        let (attack_power, defence_power) = get_initial_attack_defence_power(race);
         let castle_data = CastleData {
             size: size,
             race: race,
@@ -103,10 +88,10 @@ module move_castle::castle_admin {
             attack_power: attack_power,
             defence_power: defence_power,
             soldiers: INITIAL_SOLDIERS,
-            expirence_pool: 0,
+            experience_pool: 0,
             economy: Economy {
                 treasury: 0,
-                base_power: base_economic_power,
+                base_power: get_initial_economic_power(size),
                 settle_time: current_timestamp,
                 soldier_buff: EconomicBuff {
                     debuff: false,
@@ -114,7 +99,7 @@ module move_castle::castle_admin {
                     start: current_timestamp,
                     end: 0
                 },
-                battle_buff: vector::empty<EconomicBuff>();
+                battle_buff: vector::empty<EconomicBuff>()
             }
         };
 
@@ -133,7 +118,7 @@ module move_castle::castle_admin {
 
     /// Consume experience points from the experience pool to upgrade the castle
     public fun upgrade_castle(id: ID, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
-        let castle_data = table::borrow_mut<CastleData>(game_store.castles, id);
+        let castle_data = table::borrow_mut<ID, CastleData>(&mut game_store.castles, id);
 
         let initial_level = castle_data.level;
         while (castle_data.level < MAX_CASTLE_LEVEL) {
@@ -147,9 +132,9 @@ module move_castle::castle_admin {
         };
 
         if (castle_data.level > initial_level) {
-            event::emit(CastleUpgraded{id: object::uid_to_inner(&id), level: castle_data.level});
+            event::emit(CastleUpgraded{id: id, level: castle_data.level});
             let (base_economic_power, total_economic_power) = calculate_castle_economic_power(freeze(castle_data));
-            castle_data.economic.base_power = base_economic_power;
+            castle_data.economy.base_power = base_economic_power;
 
             let (attack_power, defence_power) = calculate_castle_base_attack_defence_power(freeze(castle_data));
             castle_data.attack_power = attack_power;
@@ -159,7 +144,11 @@ module move_castle::castle_admin {
 
     /// Settle castle's economy, including victory rewards and defeat penalties
     public fun settle_castle_economy(id: ID, clock: &Clock, game_store: &mut GameStore) {
-        let castle_data = table::borrow_mut<CastleData>(&mut game_store.castles, id);
+        settle_castle_economy_inner(id, clock, table::borrow_mut<ID, CastleData>(&mut game_store.castles, id));
+    }
+
+    /// Settle castle's economy, inner method
+    fun settle_castle_economy_inner(id: ID, clock: &Clock, castle_data: &mut CastleData) {
         let current_timestamp = clock::timestamp_ms(clock);
 
         // 1. calculate base power benefits
@@ -168,14 +157,14 @@ module move_castle::castle_admin {
         castle_data.economy.settle_time = current_timestamp;
 
         // 2. calculate soldier buff
-        let soldier_benefits = castle_data.economy.base_power(castle_data.economy.soldier_buff.start, current_timestamp, castle_data.economy.soldier_buff.power);
+        let soldier_benefits = calculate_economic_benefits(castle_data.economy.soldier_buff.start, current_timestamp, castle_data.economy.soldier_buff.power);
         castle_data.economy.treasury = castle_data.economy.treasury + soldier_benefits;
         castle_data.economy.soldier_buff.start = current_timestamp;
 
         // 3. calculate battle buff
         if (!vector::is_empty(&castle_data.economy.battle_buff)) {
             let length = vector::length(&castle_data.economy.battle_buff);
-            let expired_buffs = vector::new<u64>();
+            let expired_buffs = vector::empty<u64>();
             let i = 0;
             while (i < length) {
                 let buff = vector::borrow_mut(&mut castle_data.economy.battle_buff, i);
@@ -186,32 +175,33 @@ module move_castle::castle_admin {
                 } else {
                     battle_benefit = calculate_economic_benefits(buff.start, current_timestamp, buff.power);
                     buff.start = current_timestamp;
-                }
+                };
 
                 if (buff.debuff) {
                     castle_data.economy.treasury = castle_data.economy.treasury - battle_benefit;
                 } else {
                     castle_data.economy.treasury = castle_data.economy.treasury + battle_benefit;
-                }
+                };
             };
 
             // remove expired buffs
             while(!vector::is_empty(&expired_buffs)) {
                 let expired_buff_index = vector::remove(&mut expired_buffs, 0);
                 vector::remove(&mut castle_data.economy.battle_buff, expired_buff_index);
-            }
-            vector::destroy_empty(expired_buffs);
+            };
+            vector::destroy_empty<u64>(expired_buffs);
         }
     }    
     
     /// Castle uses treasury to recruit soldiers
     public fun recruit_soldiers (id: ID, count: u64, clock: &Clock, game_store: &mut GameStore) {
-        let final_soldiers = castle.soldiers + count;
-        assert!(final_soldiers <= get_castle_soldier_limit(castle.serial_number), E_SOLDIERS_EXCEED_LIMIT);
+        let castle_data = table::borrow_mut<ID, CastleData>(&mut game_store.castles, id);
 
-        settle_castle_economy(id, clock, game_store);
+        let final_soldiers = castle_data.soldiers + count;
+        assert!(final_soldiers <= get_castle_soldier_limit(castle_data.size), E_SOLDIERS_EXCEED_LIMIT);
 
-        let castle_data = table::borrow_mut<CastleData>(&mut game_store.castles, id);
+        settle_castle_economy_inner(id, clock, castle_data);
+
         let total_soldier_price = SOLDIER_PRICE * count;
         assert!(castle_data.economy.treasury >= total_soldier_price, E_INSUFFICIENT_TREASURY_FOR_SOLDIERS);
 
@@ -220,11 +210,71 @@ module move_castle::castle_admin {
         castle_data.economy.soldier_buff.power = SOLDIER_ECONOMIC_POWER * final_soldiers;
         castle_data.economy.soldier_buff.start = clock::timestamp_ms(clock);
 
+    } 
+    
+    /// Castle's single soldier's attack power and defence power
+    public fun get_castle_soldier_attack_defence_power(castle_data: &CastleData): (u64, u64) {
+        let soldier_attack_power;
+        let soldier_defence_power;
+        if (castle_data.race == CASTLE_RACE_HUMAN) {
+            soldier_attack_power = SOLDIER_ATTACK_POWER_HUMAN;
+            soldier_defence_power = SOLDIER_DEFENCE_POWER_HUMAN;
+        } else if (castle_data.race == CASTLE_RACE_ELF) {
+            soldier_attack_power = SOLDIER_ATTACK_POWER_ELF;
+            soldier_defence_power = SOLDIER_DEFENCE_POWER_ELF;
+        } else if (castle_data.race == CASTLE_RACE_ORCS) {
+            soldier_attack_power = SOLDIER_ATTACK_POWER_ORCS;
+            soldier_defence_power = SOLDIER_DEFENCE_POWER_ORCS;
+        } else if (castle_data.race == CASTLE_RACE_GOBLIN) {
+            soldier_attack_power = SOLDIER_ATTACK_POWER_GOBLIN;
+            soldier_defence_power = SOLDIER_DEFENCE_POWER_GOBLIN;
+        } else if (castle_data.race == CASTLE_RACE_UNDEAD) {
+            soldier_attack_power = SOLDIER_ATTACK_POWER_UNDEAD;
+            soldier_defence_power = SOLDIER_DEFENCE_POWER_UNDEAD;
+        } else {
+            abort 0
+        };
+
+        (soldier_attack_power, soldier_defence_power)
+    }
+
+    // If has race advantage
+    public fun has_race_advantage(c1: ID, c2: ID, game_store: &mut GameStore): bool {
+        let castle_data1 = table::borrow<ID, CastleData>(&game_store.castles, c1);
+        let castle_data2 = table::borrow<ID, CastleData>(&game_store.castles, c2);
+        let c1_race = castle_data1.race;
+        let c2_race = castle_data2.race;
+
+        let has;
+        if (c1_race == c2_race) {
+            has = false;
+        } else if (c1_race < c2_race) {
+            has = (c2_race - c1_race) == 1;
+        } else {
+            has = (c1_race - c2_race) == 4;
+        };
+
+        has
+    }
+
+    // Get initial economic power by castle size
+    fun get_initial_economic_power(size: u64): u64 {
+        let power;
+        if (size == CASTLE_SIZE_SMALL) {
+            power = INITIAL_ECONOMIC_POWER_SMALL_CASTLE;
+        } else if (size == CASTLE_SIZE_MIDDLE) {
+            power = INITIAL_ECONOMIC_POWER_MIDDLE_CASTLE;
+        } else if (size == CASTLE_SIZE_BIG) {
+            power = INITIAL_ECONOMIC_POWER_BIG_CASTLE;
+        } else {
+            abort 0
+        };
+        power
     }
 
     /// Calculate economic benefits based on power and time period.
     fun calculate_economic_benefits(start: u64, end: u64, power: u64): u64 {
-        math::divide_and_round_up((end - start) * power, 60u64 * 1000u64);
+        math::divide_and_round_up((end - start) * power, 60u64 * 1000u64)
     }
 
     /// Calculate castle's base economic power and total economic power
@@ -240,9 +290,9 @@ module move_castle::castle_admin {
             abort 0
         };
 
-        let level = get_castle_level(castle);
+        let level = castle_data.level;
         let base_power = math::divide_and_round_up(initial_base_power * math::pow(12, ((level - 1) as u8)), 100);
-        let total_power = base_power + castle.soldiers * SOLDIER_ECONOMIC_POWER;
+        let total_power = base_power + castle_data.soldiers * SOLDIER_ECONOMIC_POWER;
         (base_power, total_power)
     }
 
@@ -293,92 +343,96 @@ module move_castle::castle_admin {
         (attack, defence)
     }
 
-    public fun random_battle_target(from_castle: &ID, game_store: &mut GameStore, ctx: &mut TxContext): ID {
-        let length_small = vector::length(&game_store.small_castles);
-        let length_middle = vector::length(&game_store.middle_castles);
-        let length_big = vector::length(&game_store.big_castles);
-        let total_length = (length_small + length_middle + length_big);
-        assert!(total_length > 1, 0);
-
-        let random_index = utils::random_in_range(total_length, ctx);
-        let target;
-        if (random_index < length_small) {
-            target = vector::borrow(&game_store.small_castles, random_index);
-        } else if (random_index < length_small + length_middle) {
-            random_index = random_index - length_small;
-            target = vector::borrow(&game_store.middle_castles, random_index);
+    /// Get castle soldier limit by castle size
+    fun get_castle_soldier_limit(size: u64) : u64 {
+        let soldier_limit;
+        if (size == CASTLE_SIZE_SMALL) {
+            soldier_limit = MAX_SOLDIERS_SMALL_CASTLE;
+        } else if (size == CASTLE_SIZE_MIDDLE) {
+            soldier_limit = MAX_SOLDIERS_MIDDLE_CASTLE;
+        } else if (size == CASTLE_SIZE_BIG) {
+            soldier_limit = MAX_SOLDIERS_BIG_CASTLE;
         } else {
-            random_index = random_index - length_small - length_middle;
-            target = vector::borrow(&game_store.big_castles, random_index);
+            abort 0
         };
+        soldier_limit
+    }
 
-        while (object::id_to_address(from_castle) == object::id_to_address(target)) {
-            // redo random until not equals
-            random_index = utils::random_in_range(total_length, ctx);
-            if (random_index < length_small) {
-                target = vector::borrow(&game_store.small_castles, random_index);
-            } else if (random_index < length_small + length_middle) {
-                random_index = random_index - length_small;
-                target = vector::borrow(&game_store.middle_castles, random_index);
-            } else {
-                random_index = random_index - length_small - length_middle;
-                target = vector::borrow(&game_store.big_castles, random_index);
-            };
-        };
+    // public fun random_battle_target(from_castle: &ID, game_store: &mut GameStore, ctx: &mut TxContext): ID {
+    //     let length_small = vector::length(&game_store.small_castles);
+    //     let length_middle = vector::length(&game_store.middle_castles);
+    //     let length_big = vector::length(&game_store.big_castles);
+    //     let total_length = (length_small + length_middle + length_big);
+    //     assert!(total_length > 1, 0);
+
+    //     let random_index = utils::random_in_range(total_length, ctx);
+    //     let target;
+    //     if (random_index < length_small) {
+    //         target = vector::borrow(&game_store.small_castles, random_index);
+    //     } else if (random_index < length_small + length_middle) {
+    //         random_index = random_index - length_small;
+    //         target = vector::borrow(&game_store.middle_castles, random_index);
+    //     } else {
+    //         random_index = random_index - length_small - length_middle;
+    //         target = vector::borrow(&game_store.big_castles, random_index);
+    //     };
+
+    //     while (object::id_to_address(from_castle) == object::id_to_address(target)) {
+    //         // redo random until not equals
+    //         random_index = utils::random_in_range(total_length, ctx);
+    //         if (random_index < length_small) {
+    //             target = vector::borrow(&game_store.small_castles, random_index);
+    //         } else if (random_index < length_small + length_middle) {
+    //             random_index = random_index - length_small;
+    //             target = vector::borrow(&game_store.middle_castles, random_index);
+    //         } else {
+    //             random_index = random_index - length_small - length_middle;
+    //             target = vector::borrow(&game_store.big_castles, random_index);
+    //         };
+    //     };
         
-        object::id_from_address(object::id_to_address(target))
-    }
+    //     object::id_from_address(object::id_to_address(target))
+    // }
 
-    public fun log_battle(id: ID,
-                          soldier_lost: u64,
-                          economic_reparation: EconomicReparation,
-                          cooldown: u64,
-                          game_store: &mut GameStore) {
-        if (!table::contains(&game_store.battle_field, id)) {
-            let economic_reparations = vector::empty<EconomicReparation>();
-            vector::push_back(&mut economic_reparations, economic_reparation);
-            table::add(&mut game_store.battle_field, id, CastleBattleBadge{
-                    cooldown: cooldown, 
-                    unsettled_soldier_lost: soldier_lost,
-                    unsettled_economic_reparation: economic_reparations
-                });
-        } else {
-            let badge = table::borrow_mut<ID, CastleBattleBadge>(&mut game_store.battle_field, id);
-            badge.cooldown = cooldown;
-            badge.unsettled_soldier_lost = badge.unsettled_soldier_lost + soldier_lost;
-            vector::push_back(&mut badge.unsettled_economic_reparation, economic_reparation);
-        };
-    }
+    // public fun log_battle(id: ID,
+    //                       soldier_lost: u64,
+    //                       economic_reparation: EconomicReparation,
+    //                       cooldown: u64,
+    //                       game_store: &mut GameStore) {
+    //     if (!table::contains(&game_store.battle_field, id)) {
+    //         let economic_reparations = vector::empty<EconomicReparation>();
+    //         vector::push_back(&mut economic_reparations, economic_reparation);
+    //         table::add(&mut game_store.battle_field, id, CastleBattleBadge{
+    //                 cooldown: cooldown, 
+    //                 unsettled_soldier_lost: soldier_lost,
+    //                 unsettled_economic_reparation: economic_reparations
+    //             });
+    //     } else {
+    //         let badge = table::borrow_mut<ID, CastleBattleBadge>(&mut game_store.battle_field, id);
+    //         badge.cooldown = cooldown;
+    //         badge.unsettled_soldier_lost = badge.unsettled_soldier_lost + soldier_lost;
+    //         vector::push_back(&mut badge.unsettled_economic_reparation, economic_reparation);
+    //     };
+    // }
 
-    public fun new_economic_reparation(recipient: bool,
-                                        economic_power: u64,
-                                        start_time: u64,
-                                        end_time: u64): EconomicReparation {
-        EconomicReparation{
-                recipient: recipient,
-                economic_power: economic_power,
-                start_time: start_time,
-                end_time: end_time
-        }
-    }
 
-    #[test_only]
-    public fun create_game_store_for_test(ctx: &mut TxContext): GameStore{
-            GameStore{
-                id: object::new(ctx),
-                small_castles: vector::empty<ID>(),
-                middle_castles: vector::empty<ID>(),
-                big_castles: vector::empty<ID>(),
-                battle_field: table::new<ID, CastleBattleBadge>(ctx)
-            }
-    }
+    // #[test_only]
+    // public fun create_game_store_for_test(ctx: &mut TxContext): GameStore{
+    //         GameStore{
+    //             id: object::new(ctx),
+    //             small_castles: vector::empty<ID>(),
+    //             middle_castles: vector::empty<ID>(),
+    //             big_castles: vector::empty<ID>(),
+    //             battle_field: table::new<ID, CastleBattleBadge>(ctx)
+    //         }
+    // }
 
-    #[test_only]
-    public fun destroy_game_store_for_test(game_store: GameStore) {
-        let GameStore {id, small_castles, middle_castles, big_castles:_, battle_field: table} = game_store;
-        table::drop(table);
-        object::delete(id);
-    }
+    // #[test_only]
+    // public fun destroy_game_store_for_test(game_store: GameStore) {
+    //     let GameStore {id, small_castles, middle_castles, big_castles:_, battle_field: table} = game_store;
+    //     table::drop(table);
+    //     object::delete(id);
+    // }
 
     /// Castle size - small
     const CASTLE_SIZE_SMALL : u64 = 1;
@@ -452,4 +506,32 @@ module move_castle::castle_admin {
     const E_SOLDIERS_EXCEED_LIMIT : u64 = 1;
     /// Error - insufficient treasury for recruiting soldiers
     const E_INSUFFICIENT_TREASURY_FOR_SOLDIERS : u64 = 0;
+
+    /// Soldier attack power - human
+    const SOLDIER_ATTACK_POWER_HUMAN : u64 = 100;
+    /// Soldier defence power - human
+    const SOLDIER_DEFENCE_POWER_HUMAN : u64 = 100;
+    /// Soldier attack power - elf
+    const SOLDIER_ATTACK_POWER_ELF : u64 = 50;
+    /// Soldier defence power - elf
+    const SOLDIER_DEFENCE_POWER_ELF : u64 = 150;
+    /// Soldier attack power - orcs
+    const SOLDIER_ATTACK_POWER_ORCS : u64 = 150;
+    /// Soldier defence power - orcs
+    const SOLDIER_DEFENCE_POWER_ORCS : u64 = 50;
+    /// Soldier attack power - goblin
+    const SOLDIER_ATTACK_POWER_GOBLIN : u64 = 120;
+    /// Soldier defence power - goblin
+    const SOLDIER_DEFENCE_POWER_GOBLIN : u64 = 80;
+    /// Soldier attack power - undead
+    const SOLDIER_ATTACK_POWER_UNDEAD : u64 = 120;
+    /// Soldier defence power - undead
+    const SOLDIER_DEFENCE_POWER_UNDEAD : u64 = 80;
+
+    /// Max soldier count per castle - small castle
+    const MAX_SOLDIERS_SMALL_CASTLE : u64 = 500;
+    /// Max soldier count per castle - middle castle
+    const MAX_SOLDIERS_MIDDLE_CASTLE : u64 = 1000;
+    /// Max soldier count per castle - big castle
+    const MAX_SOLDIERS_BIG_CASTLE : u64 = 2000;
 }
