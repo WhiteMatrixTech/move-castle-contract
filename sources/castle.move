@@ -28,7 +28,6 @@ module move_castle::castle {
         owner: address,
     }
 
-
     /// Create new castle
     public entry fun build_castle(size: u64, name_bytes: vector<u8>, desc_bytes: vector<u8>, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
 
@@ -65,33 +64,21 @@ module move_castle::castle {
         transfer::public_transfer(castle, owner);
     }
 
-    /// Consume experience points from the experience pool to upgrade the castle
-    public entry fun upgrade_castle(castle: &mut Castle, clock: &Clock, ctx: &mut TxContext) {
-        let initial_level = castle.level;
-        while (castle.level < MAX_CASTLE_LEVEL) {
-            let exp_required_at_current_level = *vector::borrow(&REQUIRED_EXP_LEVELS, castle.level - 1);
-            if(castle.experience_pool < exp_required_at_current_level) {
-                break
-            };
-
-            castle.experience_pool = castle.experience_pool - exp_required_at_current_level;
-            castle.level = castle.level + 1;
-        };
-
-        if (castle.level > initial_level) {
-            event::emit(CastleUpgraded{id: object::uid_to_inner(&castle.id), level: castle.level});
-            let (base_economic_power, total_economic_power) = calculate_castle_economic_power(freeze(castle));
-            castle.economic.base_power = base_economic_power;
-            vector::push_back(&mut castle.economic.power_timestamps, EconomicPowerTimestamp{
-                    total_power: total_economic_power,
-                    timestamp: clock::timestamp_ms(clock),
-                });
-
-            let (attack_power, defence_power) = calculate_castle_base_attack_defence_power(freeze(castle));
-            castle.attack_power = attack_power;
-            castle.defence_power = defence_power;
-        }
+    /// Settle castle's economy
+    public entry fun settle_castle_economy(castle: &mut Castle, clock: &Clock, game_store: &mut GameStore) {
+        core::settle_castle_economy(object::id(castle), clock, game_store);
     }
+
+    /// Transfer castle
+    public entry fun transfer_castle(castle: Castle, to: address) {
+        transfer::transfer(castle, to);
+    }
+
+    /// Castle uses treasury to recruit soldiers
+    public entry fun recruit_soldiers (castle: &mut Castle, count: u64, clock: &Clock, game_store: &mut GameStore) {
+        core::recruit_soldiers(object::id(castle), count, clock, game_store);
+    }
+
 
     /// Max soldier count per castle - small castle
     const MAX_SOLDIERS_SMALL_CASTLE : u64 = 500;
@@ -127,13 +114,6 @@ module move_castle::castle {
     /// Max castle level
     const MAX_CASTLE_LEVEL : u64 = 10;
 
-    /// Each soldier's price
-    const SOLDIER_PRICE : u64 = 100;
-
-    /// Error - insufficient treasury for recruiting soldiers
-    const E_INSUFFICIENT_TREASURY_FOR_SOLDIERS : u64 = 0;
-    /// Error - soldiers exceed limit
-    const E_SOLDIERS_EXCEED_LIMIT : u64 = 1;
 
     // Get initial economic power by castle size
     fun get_initial_economic_power(size: u64): u64 {
@@ -147,26 +127,6 @@ module move_castle::castle {
         power
     }
 
-    /// Get castle ID
-    public fun get_castle_id(castle: &Castle): ID {
-        object::uid_to_inner(&castle.id)
-    }
-
-    /// Get castle level
-    public fun get_castle_level(castle: &Castle): u64 {
-        castle.level
-    }
-
-    /// Get castle soldiers
-    public fun get_castle_soldiers(castle: &Castle): u64 {
-        castle.soldiers
-    }
-
-    /// Get castle serial number
-    public fun get_castle_serial_number(castle: &Castle): u64 {
-        castle.serial_number
-    }
-
     /// Get castle race
     public fun get_castle_race(serial_number: u64): u64 {
         let race_number = serial_number / 10 % 10;
@@ -174,26 +134,6 @@ module move_castle::castle {
             race_number = race_number - 5;
         };
         race_number
-    }
-
-    /// Get castle size
-    fun get_castle_size(serial_number: u64): u64 {
-        serial_number / 10000000
-    }
-
-    /// Is castle small
-    public fun is_castle_small(castle: &Castle): bool {
-        get_castle_size(castle.serial_number) == CASTLE_SIZE_SMALL
-    }
-
-    /// Is castle middle
-    public fun is_castle_middle(castle: &Castle): bool {
-        get_castle_size(castle.serial_number) == CASTLE_SIZE_MIDDLE
-    }
-
-    /// Is castle big
-    public fun is_castle_big(castle: &Castle): bool {
-        get_castle_size(castle.serial_number) == CASTLE_SIZE_BIG
     }
 
     /// Get castle battle cooldown
@@ -257,9 +197,6 @@ module move_castle::castle {
         castle.economic.base_power
     }
 
-    
-
-
     /// Everytime castle's economic power mutates, need to mark economic mutate timestamp
     fun mutate_castle_economy(castle: &mut Castle, clock: &Clock) {
         let current_total_power = get_castle_total_economic_power(castle);
@@ -268,37 +205,6 @@ module move_castle::castle {
             total_power: current_total_power, 
             timestamp: current_timestamp,
         });
-    }
-
-    /// Settle castle's treasury, including victory rewards and defeat penalties
-    public entry fun settle_castle_treasury(castle: &mut Castle, clock: &Clock, ctx: &mut TxContext) {
-        // 1. TODO find the castle's economic mutate times in battle results
-
-        // 2. calculate economic benefits period by period
-        if (!vector::is_empty(&castle.economic.power_timestamps)) {
-            let start = vector::remove(&mut castle.economic.power_timestamps, 0);
-            while (!vector::is_empty(&castle.economic.power_timestamps)) {
-                let middle = vector::remove(&mut castle.economic.power_timestamps, 0);
-                let benefit = math::divide_and_round_up((middle.timestamp - start.timestamp) * start.total_power, 60u64 * 1000u64);
-                castle.economic.treasury = castle.economic.treasury + benefit;
-                start = middle;
-            };
-
-            let current_total_power = get_castle_total_economic_power(castle);
-            let current_timestamp = clock::timestamp_ms(clock);
-            let benefit = math::divide_and_round_up((current_timestamp - start.timestamp) * start.total_power, 60u64 * 1000u64);
-            castle.economic.treasury = castle.economic.treasury + benefit;
-            vector::push_back(&mut castle.economic.power_timestamps, EconomicPowerTimestamp {
-                total_power: current_total_power, 
-                timestamp: current_timestamp,
-            });
-        };
-    }
-
-
-    /// Transfer castle
-    public entry fun transfer_castle(castle: Castle, to: address) {
-        transfer::transfer(castle, to);
     }
 
     /// Get castle soldier limit by castle size
@@ -312,20 +218,6 @@ module move_castle::castle {
             soldier_limit = MAX_SOLDIERS_BIG_CASTLE;
         };
         soldier_limit
-    }
-
-    /// Castle uses treasury to recruit soldiers
-    public entry fun recruit_soldiers (castle: &mut Castle, count: u64, clock: &Clock, ctx: &mut TxContext) {
-        let final_soldiers = castle.soldiers + count;
-        assert!(final_soldiers <= get_castle_soldier_limit(castle.serial_number), E_SOLDIERS_EXCEED_LIMIT);
-
-        let total_soldier_price = SOLDIER_PRICE * count;
-        assert!(castle.economic.treasury >= total_soldier_price, E_INSUFFICIENT_TREASURY_FOR_SOLDIERS);
-
-        castle.economic.treasury = castle.economic.treasury - total_soldier_price;
-        castle.soldiers = final_soldiers;
-
-        mutate_castle_economy(castle, clock);
     }
 
     /// Add castle's treasury directly

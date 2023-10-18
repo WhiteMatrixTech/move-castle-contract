@@ -35,6 +35,7 @@ module move_castle::castle_admin {
 
     struct Economy {
         treasury: u64,
+        base_power: u64,
         settle_time: u64,
         soldier_buff: EconomicBuff,
         battle_buff: vector<EconomicBuff>
@@ -105,7 +106,8 @@ module move_castle::castle_admin {
             expirence_pool: 0,
             economy: Economy {
                 treasury: 0,
-                settle_time: 0,
+                base_power: base_economic_power,
+                settle_time: current_timestamp,
                 soldier_buff: EconomicBuff {
                     debuff: false,
                     power: SOLDIER_ECONOMIC_POWER * INITIAL_SOLDIERS,
@@ -131,7 +133,7 @@ module move_castle::castle_admin {
 
     /// Consume experience points from the experience pool to upgrade the castle
     public fun upgrade_castle(id: ID, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
-        let castle_data = table::borrow_mut<CastleData>(game_store, id);
+        let castle_data = table::borrow_mut<CastleData>(game_store.castles, id);
 
         let initial_level = castle_data.level;
         while (castle_data.level < MAX_CASTLE_LEVEL) {
@@ -153,6 +155,76 @@ module move_castle::castle_admin {
             castle_data.attack_power = attack_power;
             castle_data.defence_power = defence_power;
         }
+    }
+
+    /// Settle castle's economy, including victory rewards and defeat penalties
+    public fun settle_castle_economy(id: ID, clock: &Clock, game_store: &mut GameStore) {
+        let castle_data = table::borrow_mut<CastleData>(&mut game_store.castles, id);
+        let current_timestamp = clock::timestamp_ms(clock);
+
+        // 1. calculate base power benefits
+        let base_benefits = calculate_economic_benefits(castle_data.economy.settle_time, current_timestamp, castle_data.economy.base_power);
+        castle_data.economy.treasury = castle_data.economy.treasury + base_benefits;
+        castle_data.economy.settle_time = current_timestamp;
+
+        // 2. calculate soldier buff
+        let soldier_benefits = castle_data.economy.base_power(castle_data.economy.soldier_buff.start, current_timestamp, castle_data.economy.soldier_buff.power);
+        castle_data.economy.treasury = castle_data.economy.treasury + soldier_benefits;
+        castle_data.economy.soldier_buff.start = current_timestamp;
+
+        // 3. calculate battle buff
+        if (!vector::is_empty(&castle_data.economy.battle_buff)) {
+            let length = vector::length(&castle_data.economy.battle_buff);
+            let expired_buffs = vector::new<u64>();
+            let i = 0;
+            while (i < length) {
+                let buff = vector::borrow_mut(&mut castle_data.economy.battle_buff, i);
+                let battle_benefit;
+                if (buff.end <= current_timestamp) {
+                    vector::push_back(&mut expired_buffs, i);
+                    battle_benefit = calculate_economic_benefits(buff.start, buff.end, buff.power);
+                } else {
+                    battle_benefit = calculate_economic_benefits(buff.start, current_timestamp, buff.power);
+                    buff.start = current_timestamp;
+                }
+
+                if (buff.debuff) {
+                    castle_data.economy.treasury = castle_data.economy.treasury - battle_benefit;
+                } else {
+                    castle_data.economy.treasury = castle_data.economy.treasury + battle_benefit;
+                }
+            };
+
+            // remove expired buffs
+            while(!vector::is_empty(&expired_buffs)) {
+                let expired_buff_index = vector::remove(&mut expired_buffs, 0);
+                vector::remove(&mut castle_data.economy.battle_buff, expired_buff_index);
+            }
+            vector::destroy_empty(expired_buffs);
+        }
+    }    
+    
+    /// Castle uses treasury to recruit soldiers
+    public fun recruit_soldiers (id: ID, count: u64, clock: &Clock, game_store: &mut GameStore) {
+        let final_soldiers = castle.soldiers + count;
+        assert!(final_soldiers <= get_castle_soldier_limit(castle.serial_number), E_SOLDIERS_EXCEED_LIMIT);
+
+        settle_castle_economy(id, clock, game_store);
+
+        let castle_data = table::borrow_mut<CastleData>(&mut game_store.castles, id);
+        let total_soldier_price = SOLDIER_PRICE * count;
+        assert!(castle_data.economy.treasury >= total_soldier_price, E_INSUFFICIENT_TREASURY_FOR_SOLDIERS);
+
+        castle_data.economy.treasury = castle_data.economy.treasury - total_soldier_price;
+        castle_data.soldiers = final_soldiers;
+        castle_data.economy.soldier_buff.power = SOLDIER_ECONOMIC_POWER * final_soldiers;
+        castle_data.economy.soldier_buff.start = clock::timestamp_ms(clock);
+
+    }
+
+    /// Calculate economic benefits based on power and time period.
+    fun calculate_economic_benefits(start: u64, end: u64, power: u64): u64 {
+        math::divide_and_round_up((end - start) * power, 60u64 * 1000u64);
     }
 
     /// Calculate castle's base economic power and total economic power
@@ -372,4 +444,12 @@ module move_castle::castle_admin {
     const INITIAL_SOLDIERS : u64 = 10;
     /// Soldier economic power
     const SOLDIER_ECONOMIC_POWER : u64 = 1;
+
+    /// Each soldier's price
+    const SOLDIER_PRICE : u64 = 100;
+
+    /// Error - soldiers exceed limit
+    const E_SOLDIERS_EXCEED_LIMIT : u64 = 1;
+    /// Error - insufficient treasury for recruiting soldiers
+    const E_INSUFFICIENT_TREASURY_FOR_SOLDIERS : u64 = 0;
 }
