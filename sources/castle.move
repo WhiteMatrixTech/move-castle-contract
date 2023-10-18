@@ -7,36 +7,19 @@ module move_castle::castle {
     use sui::tx_context::{Self, TxContext};
     use std::string::{Self, String};
     use std::vector;
-    use move_castle::utils;
-    use move_castle::castle_admin::{Self, GameStore};
     use sui::event;
     use sui::math;
     use sui::table::{Table, Self};
     use sui::dynamic_field;
+    
+    use move_castle::utils;
+    use move_castle::core::{Self, GameStore};
 
     struct Castle has key, store {
         id: UID,
         name: String,
-        serial_number: u64,
-        level: u64,
-        attack_power: u64,
-        defence_power: u64,
-        experience_pool: u64,
-        economic: Economic,
-        soldiers: u64,
-        has_battle_ticket: bool,
-        battle_cooldown: u64,
-    }
-
-    struct Economic has store {
-        treasury: u64,
-        base_power: u64,
-        power_timestamps: vector<EconomicPowerTimestamp>,
-    }
-
-    struct EconomicPowerTimestamp has store, drop {
-        total_power: u64,
-        timestamp: u64
+        description: String,
+        serial_number: u64
     }
 
     /// Event - castle built
@@ -51,23 +34,69 @@ module move_castle::castle {
         level: u64,
     }
 
-    /// Castle size - small
-    const CASTLE_SIZE_SMALL : u64 = 1;
-    /// Castle size - middle
-    const CASTLE_SIZE_MIDDLE : u64 = 2;
-    /// Castle size - big
-    const CASTLE_SIZE_BIG : u64 = 3;
+    /// Create new castle
+    public entry fun build_castle(size: u64, name_bytes: vector<u8>, desc_bytes: vector<u8>, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
 
-    /// Castle race - human
-    const CASTLE_RACE_HUMAN : u64 = 0;
-    /// Castle race - elf
-    const CASTLE_RACE_ELF : u64 = 1;
-    /// Castle race - orcs
-    const CASTLE_RACE_ORCS : u64 = 2;
-    /// Castle race - goblin
-    const CASTLE_RACE_GOBLIN : u64 = 3;
-    /// Castle race - undead
-    const CASTLE_RACE_UNDEAD : u64 = 4;
+        let obj_id = object::new(ctx);
+        let serial_number = utils::generate_castle_serial_number(size, &mut obj_id);
+
+        let race = get_castle_race(serial_number);
+        let (attack_power, defence_power) = get_initial_attack_defence_power(race);
+    
+        let castle = Castle {
+            id: obj_id,
+            name: string::utf8(name_bytes),
+            description: string::utf8(desc_bytes),
+            serial_number: serial_number,
+        };
+
+        let total_economic_power = get_castle_total_economic_power(&castle);
+        let id = object::uid_to_inner(&castle.id);
+        core::new_castle(
+            id, 
+            size,
+            race,
+            attack_power,
+            defence_power,
+            get_initial_economic_power(size),
+            total_economic_power,
+            clock::timestamp_ms(clock),
+            game_store
+        );
+        
+        let owner = tx_context::sender(ctx);
+        event::emit(CastleBuilt{id: id, owner: owner});
+
+        transfer::public_transfer(castle, owner);
+    }
+
+    /// Consume experience points from the experience pool to upgrade the castle
+    public entry fun upgrade_castle(castle: &mut Castle, clock: &Clock, ctx: &mut TxContext) {
+        let initial_level = castle.level;
+        while (castle.level < MAX_CASTLE_LEVEL) {
+            let exp_required_at_current_level = *vector::borrow(&REQUIRED_EXP_LEVELS, castle.level - 1);
+            if(castle.experience_pool < exp_required_at_current_level) {
+                break
+            };
+
+            castle.experience_pool = castle.experience_pool - exp_required_at_current_level;
+            castle.level = castle.level + 1;
+        };
+
+        if (castle.level > initial_level) {
+            event::emit(CastleUpgraded{id: object::uid_to_inner(&castle.id), level: castle.level});
+            let (base_economic_power, total_economic_power) = calculate_castle_economic_power(freeze(castle));
+            castle.economic.base_power = base_economic_power;
+            vector::push_back(&mut castle.economic.power_timestamps, EconomicPowerTimestamp{
+                    total_power: total_economic_power,
+                    timestamp: clock::timestamp_ms(clock),
+                });
+
+            let (attack_power, defence_power) = calculate_castle_base_attack_defence_power(freeze(castle));
+            castle.attack_power = attack_power;
+            castle.defence_power = defence_power;
+        }
+    }
 
     /// Max soldier count per castle - small castle
     const MAX_SOLDIERS_SMALL_CASTLE : u64 = 500;
@@ -150,57 +179,6 @@ module move_castle::castle {
     /// Error - soldiers exceed limit
     const E_SOLDIERS_EXCEED_LIMIT : u64 = 1;
 
-    /// Create new castle
-    public entry fun build_castle(size: u64, name_bytes: vector<u8>, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
-        let castle_economic = Economic {
-            treasury: 0,
-            base_power: get_initial_economic_power(size),
-            power_timestamps: vector::empty<EconomicPowerTimestamp>(),
-        };
-
-        let obj_id = object::new(ctx);
-        let serial_number = utils::generate_castle_serial_number(size, &mut obj_id);
-
-        let race = get_castle_race(serial_number);
-        let (attack_power, defence_power) = get_initial_attack_defence_power(race);
-    
-        let castle = Castle {
-            id: obj_id,
-            name: string::utf8(name_bytes),
-            serial_number: serial_number,
-            level: 1,
-            attack_power: attack_power,
-            defence_power: defence_power,
-            experience_pool: 0,
-            economic: castle_economic,
-            soldiers: 10,
-            has_battle_ticket: false,
-            battle_cooldown: 0,
-        };
-
-        let total_economic_power = get_castle_total_economic_power(&castle);
-        vector::push_back(
-            &mut castle.economic.power_timestamps, 
-            EconomicPowerTimestamp {
-                total_power: total_economic_power, 
-                timestamp: clock::timestamp_ms(clock),
-            });
-        
-        let owner = tx_context::sender(ctx);
-        event::emit(CastleBuilt{id: object::uid_to_inner(&castle.id), owner: owner});
-        
-        if (is_castle_small(&castle)) {
-            castle_admin::record_small_castle(game_store, object::id(&castle));
-        };
-        if (is_castle_middle(&castle)) {
-            castle_admin::record_middle_castle(game_store, object::id(&castle));
-        };
-        if (is_castle_big(&castle)) {
-            castle_admin::record_big_castle(game_store, object::id(&castle));
-        };
-
-        transfer::public_transfer(castle, owner);
-    }
 
     /// Get initial attack power and defence power by race
     fun get_initial_attack_defence_power(race: u64): (u64, u64) {
@@ -342,35 +320,7 @@ module move_castle::castle {
         castle.economic.base_power
     }
 
-    /// Consume experience points from the experience pool to upgrade the castle
-    public entry fun upgrade_castle(castle: &mut Castle, clock: &Clock, ctx: &mut TxContext) {
-        /// TODO must after battle results settled
-
-        let initial_level = castle.level;
-        while (castle.level < MAX_CASTLE_LEVEL) {
-            let exp_required_at_current_level = *vector::borrow(&REQUIRED_EXP_LEVELS, castle.level - 1);
-            if(castle.experience_pool < exp_required_at_current_level) {
-                break
-            };
-
-            castle.experience_pool = castle.experience_pool - exp_required_at_current_level;
-            castle.level = castle.level + 1;
-        };
-
-        if (castle.level > initial_level) {
-            event::emit(CastleUpgraded{id: object::uid_to_inner(&castle.id), level: castle.level});
-            let (base_economic_power, total_economic_power) = calculate_castle_economic_power(freeze(castle));
-            castle.economic.base_power = base_economic_power;
-            vector::push_back(&mut castle.economic.power_timestamps, EconomicPowerTimestamp{
-                    total_power: total_economic_power,
-                    timestamp: clock::timestamp_ms(clock),
-                });
-
-            let (attack_power, defence_power) = calculate_castle_base_attack_defence_power(freeze(castle));
-            castle.attack_power = attack_power;
-            castle.defence_power = defence_power;
-        }
-    }
+    
 
     fun calculate_castle_economic_power(castle: &Castle): (u64, u64) {
         let size = get_castle_size(castle.serial_number);
