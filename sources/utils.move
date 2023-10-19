@@ -35,4 +35,14 @@ module move_castle::utils {
         result_num
     }
 
+    public fun abs_minus(a: u64, b: u64): u64 {
+        let result;
+        if (a > b) {
+            result = a - b;
+        } else {
+            result = b - a;
+        };
+        result
+    }
+
 }
