@@ -7,6 +7,8 @@ module move_castle::core {
     use sui::table;
     use sui::math;
     use sui::event;
+    use sui::dynamic_field;
+
     use move_castle::utils;
 
     /// Capability to modify game settings
@@ -20,7 +22,6 @@ module move_castle::core {
         small_castle_count: u64,
         middle_castle_count: u64,
         big_castle_count: u64,
-        castles: table::Table<ID, CastleData>,
         castle_ids: vector<ID>
     }
 
@@ -50,7 +51,7 @@ module move_castle::core {
         battle_cooldown: u64,
     }
 
-    struct EconomicBuff has store, drop {
+    struct EconomicBuff has copy, store, drop {
         debuff: bool,
         power: u64,
         start: u64,
@@ -76,7 +77,6 @@ module move_castle::core {
                 small_castle_count: 0,
                 middle_castle_count: 0,
                 big_castle_count: 0,
-                castles: table::new<ID, CastleData>(ctx),
                 castle_ids: vector::empty<ID>()
             }
         );
@@ -108,14 +108,14 @@ module move_castle::core {
                 battle_buff: vector::empty<EconomicBuff>()
             },
             millitary: Millitary {
-            attack_power: attack_power,
-            defence_power: defence_power,
-            soldiers: INITIAL_SOLDIERS,
-            battle_cooldown: current_timestamp
+                attack_power: attack_power,
+                defence_power: defence_power,
+                soldiers: INITIAL_SOLDIERS,
+                battle_cooldown: current_timestamp
             }
         };
 
-        table::add(&mut game_store.castles, id, castle_data);
+        dynamic_field::add(&mut game_store.id, id, castle_data);
         vector::push_back(&mut game_store.castle_ids, id);
 
         if (size == CASTLE_SIZE_SMALL) {
@@ -131,7 +131,7 @@ module move_castle::core {
 
     /// Consume experience points from the experience pool to upgrade the castle
     public fun upgrade_castle(id: ID, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
-        let castle_data = table::borrow_mut<ID, CastleData>(&mut game_store.castles, id);
+        let castle_data = dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id);
 
         let initial_level = castle_data.level;
         while (castle_data.level < MAX_CASTLE_LEVEL) {
@@ -157,7 +157,7 @@ module move_castle::core {
 
     /// Settle castle's economy, including victory rewards and defeat penalties
     public fun settle_castle_economy(id: ID, clock: &Clock, game_store: &mut GameStore) {
-        settle_castle_economy_inner(clock, table::borrow_mut<ID, CastleData>(&mut game_store.castles, id));
+        settle_castle_economy_inner(clock, dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id));
     }
 
     /// Castle's total attack power (base + soldiers)
@@ -248,7 +248,7 @@ module move_castle::core {
     
     /// Castle uses treasury to recruit soldiers
     public fun recruit_soldiers (id: ID, count: u64, clock: &Clock, game_store: &mut GameStore) {
-        let castle_data = table::borrow_mut<ID, CastleData>(&mut game_store.castles, id);
+        let castle_data = dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id);
 
         let final_soldiers = castle_data.millitary.soldiers + count;
         assert!(final_soldiers <= get_castle_soldier_limit(castle_data.size), E_SOLDIERS_EXCEED_LIMIT);
@@ -321,7 +321,7 @@ module move_castle::core {
             end: economy_buff_end,
         });
         // 4. put back to table
-        table::add(&mut game_store.castles, castle_data.id, castle_data);
+        dynamic_field::add(&mut game_store.id, castle_data.id, castle_data);
     }
 
     public fun get_castle_soldiers(castle_data: &CastleData): u64 {
@@ -458,41 +458,33 @@ module move_castle::core {
         object::id_from_address(object::id_to_address(target))
     }
 
-    public fun borrow_castle_data(id1: ID, id2: ID, game_store: &GameStore): (&CastleData, &CastleData) {
-        let castles = &game_store.castles;
-        let castle_data1 = table::borrow<ID, CastleData>(castles, id1);
-        let castle_data2 = table::borrow<ID, CastleData>(castles, id2);
-        (castle_data1, castle_data2)
-    }
-
     public fun fetch_castle_data(id1: ID, id2: ID, game_store: &mut GameStore): (CastleData, CastleData) {
-        let castle_data1 = table::remove<ID, CastleData>(&mut game_store.castles, id1);
-        let castle_data2 = table::remove<ID, CastleData>(&mut game_store.castles, id2);
+        let castle_data1 = dynamic_field::remove<ID, CastleData>(&mut game_store.id, id1);
+        let castle_data2 = dynamic_field::remove<ID, CastleData>(&mut game_store.id, id2);
         (castle_data1, castle_data2)
     }
 
-    public fun borrow_mut_castle_data(id: ID, game_store: &mut GameStore): &mut CastleData {
-        table::borrow_mut<ID, CastleData>(&mut game_store.castles, id)
+    public fun test_set_exp(id: ID, exp: u64, game_store: &mut GameStore) {
+        let castle_data = dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id);
+        castle_data.experience_pool = exp;
     }
 
+    #[test_only]
+    public fun create_game_store_for_test(ctx: &mut TxContext): GameStore{
+            GameStore{
+                id: object::new(ctx),
+                small_castle_count: 0,
+                middle_castle_count: 0,
+                big_castle_count: 0,
+                castle_ids: vector::empty<ID>()
+            }
+    }
 
-    // #[test_only]
-    // public fun create_game_store_for_test(ctx: &mut TxContext): GameStore{
-    //         GameStore{
-    //             id: object::new(ctx),
-    //             small_castles: vector::empty<ID>(),
-    //             middle_castles: vector::empty<ID>(),
-    //             big_castles: vector::empty<ID>(),
-    //             battle_field: table::new<ID, CastleBattleBadge>(ctx)
-    //         }
-    // }
-
-    // #[test_only]
-    // public fun destroy_game_store_for_test(game_store: GameStore) {
-    //     let GameStore {id, small_castles, middle_castles, big_castles:_, battle_field: table} = game_store;
-    //     table::drop(table);
-    //     object::delete(id);
-    // }
+    #[test_only]
+    public fun destroy_game_store_for_test(game_store: GameStore) {
+        let GameStore {id, small_castle_count, middle_castle_count, big_castle_count, castle_ids:_} = game_store;
+        object::delete(id);
+    }
 
     /// Castle size - small
     const CASTLE_SIZE_SMALL : u64 = 1;

@@ -77,4 +77,8 @@ module move_castle::castle {
         race_number
     }
 
+    public fun test_set_exp(castle: &mut Castle, exp: u64, game_store: &mut GameStore) {
+        core::test_set_exp(object::id(castle), exp, game_store);
+    }
+
 }

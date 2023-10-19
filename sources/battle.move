@@ -27,7 +27,7 @@ module move_castle::battle {
     const BATTLE_LOSER_COOLDOWN_MS : u64 = 4 * 60 * 60 * 1000;
     const BATTLE_LOSER_ECONOMIC_PENALTY_TIME : u64 = 4 * 60 * 60 * 1000;
 
-    const E_BATTLE_COOLDOWN : u64 = 2;
+    const E_BATTLE_COOLDOWN : u64 = 1;
 
     public entry fun battle(castle: &mut Castle, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
         // 1. random out a target
