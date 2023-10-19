@@ -20,7 +20,8 @@ module move_castle::core {
         small_castle_count: u64,
         middle_castle_count: u64,
         big_castle_count: u64,
-        castles: table::Table<ID, CastleData>
+        castles: table::Table<ID, CastleData>,
+        castle_ids: vector<ID>
     }
 
     /// Holding castle info
@@ -28,11 +29,9 @@ module move_castle::core {
         size: u64,
         race: u64,
         level: u64,
-        attack_power: u64,
-        defence_power: u64,
-        soldiers: u64,
         experience_pool: u64,
         economy: Economy,
+        millitary: Millitary,
     }
 
     struct Economy has store {
@@ -41,6 +40,13 @@ module move_castle::core {
         settle_time: u64,
         soldier_buff: EconomicBuff,
         battle_buff: vector<EconomicBuff>
+    }
+
+    struct Millitary has store {
+        attack_power: u64,
+        defence_power: u64,
+        soldiers: u64,
+        battle_cooldown: u64,
     }
 
     struct EconomicBuff has store, drop {
@@ -69,7 +75,8 @@ module move_castle::core {
                 small_castle_count: 0,
                 middle_castle_count: 0,
                 big_castle_count: 0,
-                castles: table::new<ID, CastleData>(ctx)
+                castles: table::new<ID, CastleData>(ctx),
+                castle_ids: vector::empty<ID>()
             }
         );
     }
@@ -85,9 +92,6 @@ module move_castle::core {
             size: size,
             race: race,
             level: 1,
-            attack_power: attack_power,
-            defence_power: defence_power,
-            soldiers: INITIAL_SOLDIERS,
             experience_pool: 0,
             economy: Economy {
                 treasury: 0,
@@ -100,10 +104,17 @@ module move_castle::core {
                     end: 0
                 },
                 battle_buff: vector::empty<EconomicBuff>()
+            },
+            millitary: Millitary {
+            attack_power: attack_power,
+            defence_power: defence_power,
+            soldiers: INITIAL_SOLDIERS,
+            battle_cooldown: current_timestamp
             }
         };
 
         table::add(&mut game_store.castles, id, castle_data);
+        vector::push_back(&mut game_store.castle_ids, id);
 
         if (size == CASTLE_SIZE_SMALL) {
             game_store.small_castle_count = game_store.small_castle_count + 1;
@@ -137,8 +148,8 @@ module move_castle::core {
             castle_data.economy.base_power = base_economic_power;
 
             let (attack_power, defence_power) = calculate_castle_base_attack_defence_power(freeze(castle_data));
-            castle_data.attack_power = attack_power;
-            castle_data.defence_power = defence_power;
+            castle_data.millitary.attack_power = attack_power;
+            castle_data.millitary.defence_power = defence_power;
         }
     }
 
@@ -197,7 +208,7 @@ module move_castle::core {
     public fun recruit_soldiers (id: ID, count: u64, clock: &Clock, game_store: &mut GameStore) {
         let castle_data = table::borrow_mut<ID, CastleData>(&mut game_store.castles, id);
 
-        let final_soldiers = castle_data.soldiers + count;
+        let final_soldiers = castle_data.millitary.soldiers + count;
         assert!(final_soldiers <= get_castle_soldier_limit(castle_data.size), E_SOLDIERS_EXCEED_LIMIT);
 
         settle_castle_economy_inner(id, clock, castle_data);
@@ -206,7 +217,7 @@ module move_castle::core {
         assert!(castle_data.economy.treasury >= total_soldier_price, E_INSUFFICIENT_TREASURY_FOR_SOLDIERS);
 
         castle_data.economy.treasury = castle_data.economy.treasury - total_soldier_price;
-        castle_data.soldiers = final_soldiers;
+        castle_data.millitary.soldiers = final_soldiers;
         castle_data.economy.soldier_buff.power = SOLDIER_ECONOMIC_POWER * final_soldiers;
         castle_data.economy.soldier_buff.start = clock::timestamp_ms(clock);
 
@@ -292,7 +303,7 @@ module move_castle::core {
 
         let level = castle_data.level;
         let base_power = math::divide_and_round_up(initial_base_power * math::pow(12, ((level - 1) as u8)), 100);
-        let total_power = base_power + castle_data.soldiers * SOLDIER_ECONOMIC_POWER;
+        let total_power = base_power + castle_data.millitary.soldiers * SOLDIER_ECONOMIC_POWER;
         (base_power, total_power)
     }
 
@@ -358,62 +369,29 @@ module move_castle::core {
         soldier_limit
     }
 
-    // public fun random_battle_target(from_castle: &ID, game_store: &mut GameStore, ctx: &mut TxContext): ID {
-    //     let length_small = vector::length(&game_store.small_castles);
-    //     let length_middle = vector::length(&game_store.middle_castles);
-    //     let length_big = vector::length(&game_store.big_castles);
-    //     let total_length = (length_small + length_middle + length_big);
-    //     assert!(total_length > 1, 0);
+    // Random a target castle id
+    public fun random_battle_target(from_castle: ID, game_store: &GameStore, ctx: &mut TxContext): ID {
+        let total_length = vector::length<ID>(&game_store.castle_ids);
+        assert!(total_length > 1, 0);
 
-    //     let random_index = utils::random_in_range(total_length, ctx);
-    //     let target;
-    //     if (random_index < length_small) {
-    //         target = vector::borrow(&game_store.small_castles, random_index);
-    //     } else if (random_index < length_small + length_middle) {
-    //         random_index = random_index - length_small;
-    //         target = vector::borrow(&game_store.middle_castles, random_index);
-    //     } else {
-    //         random_index = random_index - length_small - length_middle;
-    //         target = vector::borrow(&game_store.big_castles, random_index);
-    //     };
+        let random_index = utils::random_in_range(total_length, ctx);
+        let target = vector::borrow<ID>(&game_store.castle_ids, random_index);
 
-    //     while (object::id_to_address(from_castle) == object::id_to_address(target)) {
-    //         // redo random until not equals
-    //         random_index = utils::random_in_range(total_length, ctx);
-    //         if (random_index < length_small) {
-    //             target = vector::borrow(&game_store.small_castles, random_index);
-    //         } else if (random_index < length_small + length_middle) {
-    //             random_index = random_index - length_small;
-    //             target = vector::borrow(&game_store.middle_castles, random_index);
-    //         } else {
-    //             random_index = random_index - length_small - length_middle;
-    //             target = vector::borrow(&game_store.big_castles, random_index);
-    //         };
-    //     };
+        while (object::id_to_address(&from_castle) == object::id_to_address(target)) {
+            // redo random until not equals
+            random_index = utils::random_in_range(total_length, ctx);
+            target = vector::borrow<ID>(&game_store.castle_ids, random_index);
+        };
         
-    //     object::id_from_address(object::id_to_address(target))
-    // }
+        object::id_from_address(object::id_to_address(target))
+    }
 
-    // public fun log_battle(id: ID,
-    //                       soldier_lost: u64,
-    //                       economic_reparation: EconomicReparation,
-    //                       cooldown: u64,
-    //                       game_store: &mut GameStore) {
-    //     if (!table::contains(&game_store.battle_field, id)) {
-    //         let economic_reparations = vector::empty<EconomicReparation>();
-    //         vector::push_back(&mut economic_reparations, economic_reparation);
-    //         table::add(&mut game_store.battle_field, id, CastleBattleBadge{
-    //                 cooldown: cooldown, 
-    //                 unsettled_soldier_lost: soldier_lost,
-    //                 unsettled_economic_reparation: economic_reparations
-    //             });
-    //     } else {
-    //         let badge = table::borrow_mut<ID, CastleBattleBadge>(&mut game_store.battle_field, id);
-    //         badge.cooldown = cooldown;
-    //         badge.unsettled_soldier_lost = badge.unsettled_soldier_lost + soldier_lost;
-    //         vector::push_back(&mut badge.unsettled_economic_reparation, economic_reparation);
-    //     };
-    // }
+    public fun fetch_castle_data(id1: ID, id2: ID, game_store: &mut GameStore): (&CastleData, &CastleData) {
+        let castles = &mut game_store.castles;
+        let castle_data1 = table::borrow<ID, CastleData>(castles, id1);
+        let castle_data2 = table::borrow<ID, CastleData>(castles, id2);
+        (castle_data1, castle_data2)
+    }
 
 
     // #[test_only]
