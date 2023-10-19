@@ -77,8 +77,12 @@ module move_castle::castle {
         race_number
     }
 
-    public fun test_set_exp(castle: &mut Castle, exp: u64, game_store: &mut GameStore) {
+    public entry fun test_set_exp(castle: &mut Castle, exp: u64, game_store: &mut GameStore) {
         core::test_set_exp(object::id(castle), exp, game_store);
+    }
+
+    public entry fun test_clear_battle_cooldown(castle: &mut Castle, game_store: &mut GameStore) {
+        core::test_clear_battle_cooldown(object::id(castle), game_store);
     }
 
 }

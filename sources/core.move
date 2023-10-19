@@ -235,6 +235,7 @@ module move_castle::core {
                 } else {
                     castle_data.economy.treasury = castle_data.economy.treasury + battle_benefit;
                 };
+                i = i + 1;
             };
 
             // remove expired buffs
@@ -467,6 +468,11 @@ module move_castle::core {
     public fun test_set_exp(id: ID, exp: u64, game_store: &mut GameStore) {
         let castle_data = dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id);
         castle_data.experience_pool = exp;
+    }
+
+    public fun test_clear_battle_cooldown(id: ID, game_store: &mut GameStore) {
+        let castle_data = dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id);
+        castle_data.millitary.battle_cooldown = 0;
     }
 
     #[test_only]
