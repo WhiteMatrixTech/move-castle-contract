@@ -162,14 +162,24 @@ module move_castle::core {
 
     /// Castle's total attack power (base + soldiers)
     public fun get_castle_total_attack_power(castle_data: &CastleData): u64 {
-        let (soldier_attack_power, _) = get_castle_soldier_attack_defence_power(castle_data);
-        castle_data.millitary.attack_power + castle_data.millitary.soldiers * soldier_attack_power
+        castle_data.millitary.attack_power + get_castle_total_soldiers_attack_power(castle_data)
     }
 
     /// Castle's total defence power (base + soldiers)
     public fun get_castle_total_defence_power(castle_data: &CastleData): u64 {
+        castle_data.millitary.defence_power + get_castle_total_soldiers_defence_power(castle_data)
+    }
+
+    /// Castle's total soldiers attack power
+    public fun get_castle_total_soldiers_attack_power(castle_data: &CastleData): u64 {
+        let (soldier_attack_power, _) = get_castle_soldier_attack_defence_power(castle_data);
+        castle_data.millitary.soldiers * soldier_attack_power
+    }
+
+    /// Castle's total soldiers defence power
+    public fun get_castle_total_soldiers_defence_power(castle_data: &CastleData): u64 {
         let (_, soldier_defence_power) = get_castle_soldier_attack_defence_power(castle_data);
-        castle_data.millitary.defence_power + castle_data.millitary.soldiers * soldier_defence_power
+        castle_data.millitary.soldiers * soldier_defence_power
     }
 
     /// Castle's single soldier's attack power and defence power
@@ -307,21 +317,23 @@ module move_castle::core {
     }
 
     /// Settle battle
-    public fun battle_settlement_save_castle_data(game_store: &mut GameStore, castle_data: CastleData, win: bool, cooldown: u64, economic_base_power: u64, current_timestamp: u64, economy_buff_end: u64, soldiers_left: u64) {
+    public fun battle_settlement_save_castle_data(game_store: &mut GameStore, castle_data: CastleData, win: bool, cooldown: u64, economic_base_power: u64, current_timestamp: u64, economy_buff_end: u64, soldiers_left: u64, exp_gain: u64) {
         // 1. battle cooldown
         castle_data.millitary.battle_cooldown = cooldown;
         // 2. soldier left
         castle_data.millitary.soldiers = soldiers_left;
         castle_data.economy.soldier_buff.power = calculate_soldiers_economic_power(soldiers_left);
         castle_data.economy.soldier_buff.start = current_timestamp;
-        // 3. economy buff
+        // 3. exp gain
+        castle_data.experience_pool = castle_data.experience_pool + exp_gain;
+        // 4. economy buff
         vector::push_back(&mut castle_data.economy.battle_buff, EconomicBuff {
             debuff: !win,
             power: economic_base_power,
             start: current_timestamp,
             end: economy_buff_end,
         });
-        // 4. put back to table
+        // 5. put back to table
         dynamic_field::add(&mut game_store.id, castle_data.id, castle_data);
     }
 
@@ -465,6 +477,10 @@ module move_castle::core {
         (castle_data1, castle_data2)
     }
 
+    public fun battle_winner_exp(castle_data: &CastleData): u64 {
+        *vector::borrow<u64>(&BATTLE_EXP_GAIN_LEVELS, castle_data.level)
+    }
+
     public fun test_set_exp(id: ID, exp: u64, game_store: &mut GameStore) {
         let castle_data = dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id);
         castle_data.experience_pool = exp;
@@ -512,6 +528,9 @@ module move_castle::core {
 
     /// Experience points required for castle level 2 - 10
     const REQUIRED_EXP_LEVELS : vector<u64> = vector[100, 150, 225, 338, 507, 760, 1140, 1709, 2563];
+
+    /// Experience points the winner gain in a battle based on winner's level 1 - 10
+    const BATTLE_EXP_GAIN_LEVELS : vector<u64> = vector[25, 30, 40, 55, 75, 100, 130, 165, 205, 250];
     
     /// Max castle level
     const MAX_CASTLE_LEVEL : u64 = 10;
