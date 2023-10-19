@@ -353,6 +353,20 @@ module move_castle::core {
         castle_data.id
     }
 
+    public fun allow_new_castle(size: u64, game_store: &GameStore): bool {
+        let allow;
+        if (size == CASTLE_SIZE_SMALL) {
+            allow = game_store.small_castle_count < CASTLE_AMOUNT_LIMIT_SMALL;
+        } else if (size == CASTLE_SIZE_MIDDLE) {
+            allow = game_store.middle_castle_count < CASTLE_AMOUNT_LIMIT_MIDDLE;
+        } else if (size == CASTLE_SIZE_BIG) {
+            allow = game_store.big_castle_count < CASTLE_AMOUNT_LIMIT_BIG;
+        } else {
+            abort 0
+        };
+        allow
+    }
+
     // Get initial economic power by castle size
     fun get_initial_economic_power(size: u64): u64 {
         let power;
@@ -611,4 +625,11 @@ module move_castle::core {
     const MAX_SOLDIERS_MIDDLE_CASTLE : u64 = 1000;
     /// Max soldier count per castle - big castle
     const MAX_SOLDIERS_BIG_CASTLE : u64 = 2000;
+
+    /// Castle amount limit - small
+    const CASTLE_AMOUNT_LIMIT_SMALL : u64 = 500;
+    /// Castle amount limit - middle
+    const CASTLE_AMOUNT_LIMIT_MIDDLE : u64 = 300;
+    /// Castle amount limit - big
+    const CASTLE_AMOUNT_LIMIT_BIG : u64 = 200;
 }

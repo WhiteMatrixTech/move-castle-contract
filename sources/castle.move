@@ -26,10 +26,14 @@ module move_castle::castle {
 
     /// Create new castle
     public entry fun build_castle(size: u64, name_bytes: vector<u8>, desc_bytes: vector<u8>, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
+        // 1. castle amount check
+        assert(core::allow_new_castle(size, game_store), E_CASTLE_AMOUNT_LIMIT);
 
+        // 2. generate serial number
         let obj_id = object::new(ctx);
         let serial_number = utils::generate_castle_serial_number(size, &mut obj_id);
     
+        // 3. new castle
         let castle = Castle {
             id: obj_id,
             name: string::utf8(name_bytes),
@@ -37,6 +41,7 @@ module move_castle::castle {
             serial_number: serial_number,
         };
 
+        // 4. new castle game data
         let id = object::uid_to_inner(&castle.id);
         let race = get_castle_race(serial_number);
         core::new_castle(
@@ -47,9 +52,9 @@ module move_castle::castle {
             game_store
         );
         
+        // 5. transfer to owner
         let owner = tx_context::sender(ctx);
         event::emit(CastleBuilt{id: id, owner: owner});
-
         transfer::public_transfer(castle, owner);
     }
 
@@ -84,5 +89,7 @@ module move_castle::castle {
     public entry fun test_clear_battle_cooldown(castle: &mut Castle, game_store: &mut GameStore) {
         core::test_clear_battle_cooldown(object::id(castle), game_store);
     }
+
+    const E_CASTLE_AMOUNT_LIMIT : u64 = 0;
 
 }
