@@ -4,7 +4,6 @@ module move_castle::core {
     use sui::object::{Self, UID, ID};
     use sui::tx_context::{Self, TxContext};
     use sui::clock::{Self, Clock};
-    use sui::table;
     use sui::math;
     use sui::event;
     use sui::dynamic_field;
@@ -130,7 +129,7 @@ module move_castle::core {
     }
 
     /// Consume experience points from the experience pool to upgrade the castle
-    public fun upgrade_castle(id: ID, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
+    public fun upgrade_castle(id: ID, game_store: &mut GameStore) {
         let castle_data = dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id);
 
         let initial_level = castle_data.level;
@@ -146,7 +145,7 @@ module move_castle::core {
 
         if (castle_data.level > initial_level) {
             event::emit(CastleUpgraded{id: id, level: castle_data.level});
-            let (base_economic_power, total_economic_power) = calculate_castle_economic_power(freeze(castle_data));
+            let (base_economic_power, _) = calculate_castle_economic_power(freeze(castle_data));
             castle_data.economy.base_power = base_economic_power;
 
             let (attack_power, defence_power) = calculate_castle_base_attack_defence_power(freeze(castle_data));

@@ -1,15 +1,12 @@
 module move_castle::battle {
-    use sui::object::{Self, UID, ID};
-    use sui::tx_context::{Self, TxContext};
-    use sui::dynamic_field;
+    use sui::object::{Self, ID};
+    use sui::tx_context::TxContext;
     use sui::math;
     use sui::event;
-    use move_castle::castle::{Self, Castle};
-    use move_castle::core::{Self, GameStore, EconomicBuff};
+    use move_castle::castle::Castle;
+    use move_castle::core::{Self, GameStore};
     use move_castle::utils;
     use sui::clock::{Self, Clock};
-    use std::debug;
-    use std::vector;
     
     /// Battle event
     struct CastleBattleLog has store, copy, drop {

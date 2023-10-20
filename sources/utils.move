@@ -1,9 +1,8 @@
 module move_castle::utils {
     use std::hash;
-    use std::string::{Self, String};
     use std::vector;
     use sui::object::{Self, UID};
-    use sui::tx_context::{Self, TxContext};
+    use sui::tx_context::TxContext;
 
     public fun generate_castle_serial_number(size: u64, id: &mut UID): u64 {
         let hash = hash::sha2_256(object::uid_to_bytes(id));

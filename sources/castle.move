@@ -5,7 +5,6 @@ module move_castle::castle {
     use sui::clock::{Self, Clock};
     use sui::tx_context::{Self, TxContext};
     use std::string::{Self, String};
-    use std::vector;
     use sui::event;
 
     use move_castle::utils;
@@ -27,7 +26,7 @@ module move_castle::castle {
     /// Create new castle
     public entry fun build_castle(size: u64, name_bytes: vector<u8>, desc_bytes: vector<u8>, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
         // 1. castle amount check
-        assert(core::allow_new_castle(size, game_store), E_CASTLE_AMOUNT_LIMIT);
+        assert!(core::allow_new_castle(size, game_store), E_CASTLE_AMOUNT_LIMIT);
 
         // 2. generate serial number
         let obj_id = object::new(ctx);
@@ -71,6 +70,11 @@ module move_castle::castle {
     /// Castle uses treasury to recruit soldiers
     public entry fun recruit_soldiers (castle: &mut Castle, count: u64, clock: &Clock, game_store: &mut GameStore) {
         core::recruit_soldiers(object::id(castle), count, clock, game_store);
+    }
+
+    /// Upgrade castle
+    public entry fun upgrade_castle(castle: &mut Castle, game_store: &mut GameStore) {
+        core::upgrade_castle(object::id(castle), game_store);
     }
 
     /// Get castle race
