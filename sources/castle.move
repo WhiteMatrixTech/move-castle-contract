@@ -4,12 +4,15 @@ module move_castle::castle {
     use sui::transfer;
     use sui::clock::{Self, Clock};
     use sui::tx_context::{Self, TxContext};
-    use std::string::{Self, String};
+    use std::string::{Self, utf8, String};
     use sui::event;
+    use sui::package;
+    use sui::display;
 
     use move_castle::utils;
     use move_castle::core::{Self, GameStore};
 
+    /// The castle
     struct Castle has key, store {
         id: UID,
         name: String,
@@ -17,10 +20,41 @@ module move_castle::castle {
         serial_number: u64
     }
 
+    /// One-Time-Witness for the module
+    struct CASTLE has drop {}
+
     /// Event - castle built
     struct CastleBuilt has copy, drop {
         id: ID,
         owner: address,
+    }
+
+    fun init(otw: CASTLE, ctx: &mut TxContext) {
+        let keys = vector[
+            utf8(b"name"),
+            utf8(b"link"),
+            utf8(b"image_url"),
+            utf8(b"description"),
+            utf8(b"project_url"),
+            utf8(b"creator"),
+        ];
+
+        let values = vector[
+            utf8(b"{name}"),
+            utf8(b"https://movecastle.info/castles/{serial_number}"),
+            utf8(b"https://movecastle.info/static/media/cb-0.605fc6d2.png"),
+            utf8(b"{description}"),
+            utf8(b"https://movecastle.info"),
+            utf8(b"Castle Builder"),
+        ];
+
+        let publisher = package::claim(otw, ctx);
+        let display = display::new_with_fields<Castle>(&publisher, keys, values, ctx);
+
+        display::update_version(&mut display);
+
+        transfer::public_transfer(publisher, tx_context::sender(ctx));
+        transfer::public_transfer(display, tx_context::sender(ctx));
     }
 
     /// Create new castle
