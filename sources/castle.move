@@ -116,7 +116,7 @@ module move_castle::castle {
 
     /// Get castle race
     public fun get_castle_race(serial_number: u64): u64 {
-        let race_number = serial_number / 10 % 10;
+        let race_number = serial_number % 10;
         if (race_number >= 5) {
             race_number = race_number - 5;
         };
