@@ -17,7 +17,8 @@ module move_castle::castle {
         id: UID,
         name: String,
         description: String,
-        serial_number: u64
+        serial_number: u64,
+        image_id: u64,
     }
 
     /// One-Time-Witness for the module
@@ -42,7 +43,7 @@ module move_castle::castle {
         let values = vector[
             utf8(b"{name}"),
             utf8(b"https://movecastle.info/castles/{serial_number}"),
-            utf8(b"https://movecastle.info/static/media/cb-0.605fc6d2.png"),
+            utf8(b"https://movecastle.info/static/media/castles/{image_id}.png"),
             utf8(b"{description}"),
             utf8(b"https://movecastle.info"),
             utf8(b"Castle Builder"),
@@ -65,6 +66,7 @@ module move_castle::castle {
         // 2. generate serial number
         let obj_id = object::new(ctx);
         let serial_number = utils::generate_castle_serial_number(size, &mut obj_id);
+        let image_id = utils::serial_number_to_image_id(serial_number);
     
         // 3. new castle
         let castle = Castle {
@@ -72,6 +74,7 @@ module move_castle::castle {
             name: string::utf8(name_bytes),
             description: string::utf8(desc_bytes),
             serial_number: serial_number,
+            image_id: image_id,
         };
 
         // 4. new castle game data
