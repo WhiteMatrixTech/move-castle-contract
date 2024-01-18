@@ -18,10 +18,10 @@ module move_castle::core {
     /// Holding game info
     struct GameStore has key, store {
         id: UID,
-        small_castle_count: u64,
-        middle_castle_count: u64,
-        big_castle_count: u64,
-        castle_ids: vector<ID>
+        small_castle_count: u64, // for small castle amount limit
+        middle_castle_count: u64, // for middle castle amount limit
+        big_castle_count: u64, // for big castle amount limit
+        castle_ids: vector<ID> // holding all castle object ids
     }
 
     /// Holding castle info

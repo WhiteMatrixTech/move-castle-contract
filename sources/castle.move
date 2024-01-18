@@ -18,7 +18,7 @@ module move_castle::castle {
         name: String,
         description: String,
         serial_number: u64,
-        image_id: u64,
+        image_id: String,
     }
 
     /// One-Time-Witness for the module
@@ -59,7 +59,7 @@ module move_castle::castle {
     }
 
     /// Create new castle
-    public entry fun build_castle(size: u64, name_bytes: vector<u8>, desc_bytes: vector<u8>, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
+    entry fun build_castle(size: u64, name_bytes: vector<u8>, desc_bytes: vector<u8>, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
         // 1. castle amount check
         assert!(core::allow_new_castle(size, game_store), E_CASTLE_AMOUNT_LIMIT);
 
@@ -100,7 +100,7 @@ module move_castle::castle {
     }
 
     /// Transfer castle
-    public entry fun transfer_castle(castle: Castle, to: address) {
+    entry fun transfer_castle(castle: Castle, to: address) {
         transfer::transfer(castle, to);
     }
 
