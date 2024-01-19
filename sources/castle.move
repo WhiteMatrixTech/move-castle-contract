@@ -80,7 +80,7 @@ module move_castle::castle {
         // 4. new castle game data
         let id = object::uid_to_inner(&castle.id);
         let race = get_castle_race(serial_number);
-        core::new_castle(
+        core::init_castle_data(
             id, 
             size,
             race,

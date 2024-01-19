@@ -40,7 +40,7 @@ module move_castle::battle {
         assert!(core::get_castle_battle_cooldown(&defender) < current_timestamp, E_BATTLE_COOLDOWN);
 
         // 4. battle
-        // 4.1 calculate total attack power and defence power
+        // 4.1 calculate total attack power and defense power
         let attack_power = core::get_castle_total_attack_power(&attacker);
         let defence_power = core::get_castle_total_defence_power(&defender);
         let total_soldiers_attack_power = core::get_castle_total_soldiers_attack_power(&attacker);

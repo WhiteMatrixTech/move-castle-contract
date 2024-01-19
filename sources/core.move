@@ -81,12 +81,12 @@ module move_castle::core {
         );
     }
 
-    public fun new_castle(id: ID,
+    public fun init_castle_data(id: ID,
                             size: u64,
                             race: u64,
                             current_timestamp: u64,
                             game_store: &mut GameStore) {
-
+        // 1. get initial power and init castle data
         let (attack_power, defence_power) = get_initial_attack_defence_power(race);
         let castle_data = CastleData {
             id: id,
@@ -114,9 +114,11 @@ module move_castle::core {
             }
         };
 
+        // 2. store the castle data
         dynamic_field::add(&mut game_store.id, id, castle_data);
-        vector::push_back(&mut game_store.castle_ids, id);
 
+        // 3. update castle ids and castle count
+        vector::push_back(&mut game_store.castle_ids, id);
         if (size == CASTLE_SIZE_SMALL) {
             game_store.small_castle_count = game_store.small_castle_count + 1;
         } else if (size == CASTLE_SIZE_MIDDLE) {
@@ -164,7 +166,7 @@ module move_castle::core {
         castle_data.millitary.attack_power + get_castle_total_soldiers_attack_power(castle_data)
     }
 
-    /// Castle's total defence power (base + soldiers)
+    /// Castle's total defense power (base + soldiers)
     public fun get_castle_total_defence_power(castle_data: &CastleData): u64 {
         castle_data.millitary.defence_power + get_castle_total_soldiers_defence_power(castle_data)
     }
@@ -175,13 +177,13 @@ module move_castle::core {
         castle_data.millitary.soldiers * soldier_attack_power
     }
 
-    /// Castle's total soldiers defence power
+    /// Castle's total soldiers defense power
     public fun get_castle_total_soldiers_defence_power(castle_data: &CastleData): u64 {
         let (_, soldier_defence_power) = get_castle_soldier_attack_defence_power(castle_data);
         castle_data.millitary.soldiers * soldier_defence_power
     }
 
-    /// Castle's single soldier's attack power and defence power
+    /// Castle's single soldier's attack power and defense power
     public fun get_castle_soldier_attack_defence_power(castle_data: &CastleData): (u64, u64) {
         let race = castle_data.race;
 
@@ -405,9 +407,9 @@ module move_castle::core {
         (base_power, total_power)
     }
 
-    /// Calculate castle's base attack power and base defence power based on level
+    /// Calculate castle's base attack power and base defense power based on level
     /// base attack power = (castle_size_factor * initial_attack_power * (1.2 ^ (level - 1)))
-    /// base defence power = (castle_size_factor * initial_defence_power * (1.2 ^ (level - 1)))
+    /// base defense power = (castle_size_factor * initial_defence_power * (1.2 ^ (level - 1)))
     fun calculate_castle_base_attack_defence_power(castle_data: &CastleData): (u64, u64) {
         let castle_size_factor = get_castle_size_factor(castle_data.size);
         let (initial_attack, initial_defence) = get_initial_attack_defence_power(castle_data.race);
@@ -431,25 +433,25 @@ module move_castle::core {
         factor
     }
 
-    /// Get initial attack power and defence power by race
+    /// Get initial attack power and defense power by race
     fun get_initial_attack_defence_power(race: u64): (u64, u64) {
-        let (attack, defence);
+        let (attack, defense);
 
         if (race == CASTLE_RACE_HUMAN) {
-            (attack, defence) = (INITIAL_ATTCK_POWER_HUMAN, INITIAL_DEFENCE_POWER_HUMAN);
+            (attack, defense) = (INITIAL_ATTCK_POWER_HUMAN, INITIAL_DEFENCE_POWER_HUMAN);
         } else if (race == CASTLE_RACE_ELF) {
-            (attack, defence) = (INITIAL_ATTCK_POWER_ELF, INITIAL_DEFENCE_POWER_ELF);
+            (attack, defense) = (INITIAL_ATTCK_POWER_ELF, INITIAL_DEFENCE_POWER_ELF);
         } else if (race == CASTLE_RACE_ORCS) {
-            (attack, defence) = (INITIAL_ATTCK_POWER_ORCS, INITIAL_DEFENCE_POWER_ORCS);
+            (attack, defense) = (INITIAL_ATTCK_POWER_ORCS, INITIAL_DEFENCE_POWER_ORCS);
         } else if (race == CASTLE_RACE_GOBLIN) {
-            (attack, defence) = (INITIAL_ATTCK_POWER_GOBLIN, INITIAL_DEFENCE_POWER_GOBLIN);
+            (attack, defense) = (INITIAL_ATTCK_POWER_GOBLIN, INITIAL_DEFENCE_POWER_GOBLIN);
         } else if (race == CASTLE_RACE_UNDEAD) {
-            (attack, defence) = (INITIAL_ATTCK_POWER_UNDEAD, INITIAL_DEFENCE_POWER_UNDEAD);
+            (attack, defense) = (INITIAL_ATTCK_POWER_UNDEAD, INITIAL_DEFENCE_POWER_UNDEAD);
         } else {
             abort 0
         };
 
-        (attack, defence)
+        (attack, defense)
     }
 
     /// Get castle soldier limit by castle size
@@ -566,15 +568,15 @@ module move_castle::core {
     /// Initial attack power - undead castle
     const INITIAL_ATTCK_POWER_UNDEAD : u64 = 800;
 
-    /// Initial defence power - human castle
+    /// Initial defense power - human castle
     const INITIAL_DEFENCE_POWER_HUMAN : u64 = 1000;
-    /// Initial defence power - elf castle
+    /// Initial defense power - elf castle
     const INITIAL_DEFENCE_POWER_ELF : u64 = 1500;
-    /// Initial defence power - orcs castle
+    /// Initial defense power - orcs castle
     const INITIAL_DEFENCE_POWER_ORCS : u64 = 500;
-    /// Initial defence power - goblin castle
+    /// Initial defense power - goblin castle
     const INITIAL_DEFENCE_POWER_GOBLIN : u64 = 800;
-    /// Initial defence power - undead castle
+    /// Initial defense power - undead castle
     const INITIAL_DEFENCE_POWER_UNDEAD : u64 = 1200;
 
     /// Initial economic power - small castle
@@ -599,23 +601,23 @@ module move_castle::core {
 
     /// Soldier attack power - human
     const SOLDIER_ATTACK_POWER_HUMAN : u64 = 100;
-    /// Soldier defence power - human
+    /// Soldier defense power - human
     const SOLDIER_DEFENCE_POWER_HUMAN : u64 = 100;
     /// Soldier attack power - elf
     const SOLDIER_ATTACK_POWER_ELF : u64 = 50;
-    /// Soldier defence power - elf
+    /// Soldier defense power - elf
     const SOLDIER_DEFENCE_POWER_ELF : u64 = 150;
     /// Soldier attack power - orcs
     const SOLDIER_ATTACK_POWER_ORCS : u64 = 150;
-    /// Soldier defence power - orcs
+    /// Soldier defense power - orcs
     const SOLDIER_DEFENCE_POWER_ORCS : u64 = 50;
     /// Soldier attack power - goblin
     const SOLDIER_ATTACK_POWER_GOBLIN : u64 = 120;
-    /// Soldier defence power - goblin
+    /// Soldier defense power - goblin
     const SOLDIER_DEFENCE_POWER_GOBLIN : u64 = 80;
     /// Soldier attack power - undead
     const SOLDIER_ATTACK_POWER_UNDEAD : u64 = 120;
-    /// Soldier defence power - undead
+    /// Soldier defense power - undead
     const SOLDIER_DEFENCE_POWER_UNDEAD : u64 = 80;
 
     /// Max soldier count per castle - small castle
