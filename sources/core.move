@@ -132,8 +132,10 @@ module move_castle::core {
 
     /// Consume experience points from the experience pool to upgrade the castle
     public fun upgrade_castle(id: ID, game_store: &mut GameStore) {
+        // 1. fetch castle data
         let castle_data = dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id);
 
+        // 2. continually upgrade if exp is enough
         let initial_level = castle_data.level;
         while (castle_data.level < MAX_CASTLE_LEVEL) {
             let exp_required_at_current_level = *vector::borrow(&REQUIRED_EXP_LEVELS, castle_data.level - 1);
@@ -145,9 +147,10 @@ module move_castle::core {
             castle_data.level = castle_data.level + 1;
         };
 
+        // 3. emit event and update powers if upgraded
         if (castle_data.level > initial_level) {
             event::emit(CastleUpgraded{id: id, level: castle_data.level});
-            let (base_economic_power, _) = calculate_castle_economic_power(freeze(castle_data));
+            let base_economic_power = calculate_castle_base_economic_power(freeze(castle_data));
             castle_data.economy.base_power = base_economic_power;
 
             let (attack_power, defence_power) = calculate_castle_base_attack_defence_power(freeze(castle_data));
@@ -260,21 +263,27 @@ module move_castle::core {
     
     /// Castle uses treasury to recruit soldiers
     public fun recruit_soldiers (id: ID, count: u64, clock: &Clock, game_store: &mut GameStore) {
+        // 1. borrow the castle data
         let castle_data = dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id);
 
+        // 2. check count limit
         let final_soldiers = castle_data.millitary.soldiers + count;
         assert!(final_soldiers <= get_castle_soldier_limit(castle_data.size), E_SOLDIERS_EXCEED_LIMIT);
 
-        settle_castle_economy_inner(clock, castle_data);
-
+        // 3. check treasury sufficiency
         let total_soldier_price = SOLDIER_PRICE * count;
         assert!(castle_data.economy.treasury >= total_soldier_price, E_INSUFFICIENT_TREASURY_FOR_SOLDIERS);
 
+        // 4. settle economy
+        settle_castle_economy_inner(clock, castle_data);
+
+        // 5. update treasury and soldiers
         castle_data.economy.treasury = castle_data.economy.treasury - total_soldier_price;
         castle_data.millitary.soldiers = final_soldiers;
+
+        // 6. update soldier economic power buff
         castle_data.economy.soldier_buff.power = SOLDIER_ECONOMIC_POWER * final_soldiers;
         castle_data.economy.soldier_buff.start = clock::timestamp_ms(clock);
-
     } 
     
 
@@ -298,23 +307,6 @@ module move_castle::core {
     // Calculate soldiers economic power
     public fun calculate_soldiers_economic_power(count: u64): u64 {
         SOLDIER_ECONOMIC_POWER * count
-    }
-
-    /// Settle battle
-    public fun battle_settlement(castle_data: &mut CastleData, win: bool, cooldown: u64, economic_base_power: u64, current_timestamp: u64, economy_buff_end: u64, soldiers_left: u64) {
-        // 1. battle cooldown
-        castle_data.millitary.battle_cooldown = cooldown;
-        // 2. soldier left
-        castle_data.millitary.soldiers = soldiers_left;
-        castle_data.economy.soldier_buff.power = calculate_soldiers_economic_power(soldiers_left);
-        castle_data.economy.soldier_buff.start = current_timestamp;
-        // 3. economy buff
-        vector::push_back(&mut castle_data.economy.battle_buff, EconomicBuff {
-            debuff: !win,
-            power: economic_base_power,
-            start: current_timestamp,
-            end: economy_buff_end,
-        });
     }
 
     /// Settle battle
@@ -388,23 +380,11 @@ module move_castle::core {
         math::divide_and_round_up((end - start) * power, 60u64 * 1000u64)
     }
 
-    /// Calculate castle's base economic power and total economic power
-    fun calculate_castle_economic_power(castle_data: &CastleData): (u64, u64) {
-        let initial_base_power;
-        if (castle_data.size == CASTLE_SIZE_SMALL) {
-            initial_base_power = INITIAL_ECONOMIC_POWER_SMALL_CASTLE;
-        } else if (castle_data.size == CASTLE_SIZE_MIDDLE) {
-            initial_base_power = INITIAL_ECONOMIC_POWER_MIDDLE_CASTLE;
-        } else if (castle_data.size == CASTLE_SIZE_BIG) {
-            initial_base_power = INITIAL_ECONOMIC_POWER_BIG_CASTLE;
-        } else {
-            abort 0
-        };
-
+    /// Calculate castle's base economic power
+    fun calculate_castle_base_economic_power(castle_data: &CastleData): u64 {
+        let initial_base_power = get_initial_economic_power(castle_data.size);
         let level = castle_data.level;
-        let base_power = math::divide_and_round_up(initial_base_power * math::pow(12, ((level - 1) as u8)), 100);
-        let total_power = base_power + castle_data.millitary.soldiers * SOLDIER_ECONOMIC_POWER;
-        (base_power, total_power)
+        math::divide_and_round_up(initial_base_power * math::pow(12, ((level - 1) as u8)), 100)
     }
 
     /// Calculate castle's base attack power and base defense power based on level

@@ -26,7 +26,7 @@ module move_castle::battle {
 
     const E_BATTLE_COOLDOWN : u64 = 1;
 
-    public entry fun battle(castle: &mut Castle, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
+    entry fun battle(castle: &mut Castle, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
         // 1. random out a target
         let attacker_id = object::id(castle);
         let target_id = core::random_battle_target(attacker_id, game_store, ctx);
@@ -51,7 +51,7 @@ module move_castle::battle {
             defence_power = math::divide_and_round_up(defence_power * 15, 10)
         };
         
-        // 4.2 determine win loss
+        // 4.2 determine win lose
         let (winner, loser);
         if (attack_power > defence_power) {
             winner = attacker;
@@ -63,14 +63,14 @@ module move_castle::battle {
         let winner_id = core::get_castle_id(&winner);
         let loser_id = core::get_castle_id(&loser);
 
-        // 5. battle settlement
-        let reparation_economic_power = core::get_castle_economic_base_power(&loser);
-        // 5.1 setting winner
+        // 5. battle settlement   
+        // 5.1 settling winner
         core::settle_castle_economy_inner(clock, &mut winner);
         let (_, winner_soldier_defence_power) = core::get_castle_soldier_attack_defence_power(&winner);
         let winner_soldiers_left = math::divide_and_round_up(utils::abs_minus(total_soldiers_attack_power, total_soldiers_defence_power), winner_soldier_defence_power);
         let winner_soldiers_lost = core::get_castle_soldiers(&winner) - winner_soldiers_left;
         let winner_exp_gain = core::battle_winner_exp(&winner);
+        let reparation_economic_power = core::get_castle_economic_base_power(&loser);
         core::battle_settlement_save_castle_data(
             game_store,
             winner, 
@@ -82,7 +82,7 @@ module move_castle::battle {
             winner_soldiers_left,
             winner_exp_gain
         );
-        // 5.2 setting loser
+        // 5.2 settling loser
         core::settle_castle_economy_inner(clock, &mut loser);
         let loser_soldiers_left = 0;
         let loser_soldiers_lost = core::get_castle_soldiers(&loser) - loser_soldiers_left;

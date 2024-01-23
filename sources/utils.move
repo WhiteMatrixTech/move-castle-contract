@@ -36,10 +36,9 @@ module move_castle::utils {
         object::delete(uid);
 
         let result_num: u64 = 0;
-        // module operation
         while (vector::length(&hash) > 0) {
             let element = vector::remove(&mut hash, 0);
-            result_num = ((result_num << 8) | (element as u64)) % 1000000u64;
+            result_num = (result_num << 8) | (element as u64);
         };
         result_num = result_num % range;
 

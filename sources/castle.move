@@ -95,7 +95,7 @@ module move_castle::castle {
     }
 
     /// Settle castle's economy
-    public entry fun settle_castle_economy(castle: &mut Castle, clock: &Clock, game_store: &mut GameStore) {
+    entry fun settle_castle_economy(castle: &mut Castle, clock: &Clock, game_store: &mut GameStore) {
         core::settle_castle_economy(object::id(castle), clock, game_store);
     }
 
@@ -105,7 +105,7 @@ module move_castle::castle {
     }
 
     /// Castle uses treasury to recruit soldiers
-    public entry fun recruit_soldiers (castle: &mut Castle, count: u64, clock: &Clock, game_store: &mut GameStore) {
+    entry fun recruit_soldiers (castle: &mut Castle, count: u64, clock: &Clock, game_store: &mut GameStore) {
         core::recruit_soldiers(object::id(castle), count, clock, game_store);
     }
 
