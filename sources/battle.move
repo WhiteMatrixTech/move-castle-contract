@@ -42,18 +42,18 @@ module move_castle::battle {
         // 4. battle
         // 4.1 calculate total attack power and defense power
         let attack_power = core::get_castle_total_attack_power(&attacker);
-        let defence_power = core::get_castle_total_defence_power(&defender);
+        let defense_power = core::get_castle_total_defense_power(&defender);
         let total_soldiers_attack_power = core::get_castle_total_soldiers_attack_power(&attacker);
-        let total_soldiers_defence_power = core::get_castle_total_soldiers_defence_power(&defender);
+        let total_soldiers_defense_power = core::get_castle_total_soldiers_defense_power(&defender);
         if (core::has_race_advantage(&attacker, &defender)) {
             attack_power = math::divide_and_round_up(attack_power * 15, 10)
         } else if (core::has_race_advantage(&defender, &attacker)) {
-            defence_power = math::divide_and_round_up(defence_power * 15, 10)
+            defense_power = math::divide_and_round_up(defense_power * 15, 10)
         };
         
         // 4.2 determine win lose
         let (winner, loser);
-        if (attack_power > defence_power) {
+        if (attack_power > defense_power) {
             winner = attacker;
             loser = defender;
         } else {
@@ -66,8 +66,8 @@ module move_castle::battle {
         // 5. battle settlement   
         // 5.1 settling winner
         core::settle_castle_economy_inner(clock, &mut winner);
-        let (_, winner_soldier_defence_power) = core::get_castle_soldier_attack_defence_power(core::get_castle_race(&winner));
-        let winner_soldiers_left = math::divide_and_round_up(utils::abs_minus(total_soldiers_attack_power, total_soldiers_defence_power), winner_soldier_defence_power);
+        let (_, winner_soldier_defense_power) = core::get_castle_soldier_attack_defense_power(core::get_castle_race(&winner));
+        let winner_soldiers_left = math::divide_and_round_up(utils::abs_minus(total_soldiers_attack_power, total_soldiers_defense_power), winner_soldier_defense_power);
         let winner_soldiers_lost = core::get_castle_soldiers(&winner) - winner_soldiers_left;
         let winner_exp_gain = core::battle_winner_exp(&winner);
         let reparation_economic_power = core::get_castle_economic_base_power(&loser);
