@@ -66,7 +66,7 @@ module move_castle::battle {
         // 5. battle settlement   
         // 5.1 settling winner
         core::settle_castle_economy_inner(clock, &mut winner);
-        let (_, winner_soldier_defence_power) = core::get_castle_soldier_attack_defence_power(&winner);
+        let (_, winner_soldier_defence_power) = core::get_castle_soldier_attack_defence_power(core::get_castle_race(&winner));
         let winner_soldiers_left = math::divide_and_round_up(utils::abs_minus(total_soldiers_attack_power, total_soldiers_defence_power), winner_soldier_defence_power);
         let winner_soldiers_lost = core::get_castle_soldiers(&winner) - winner_soldiers_left;
         let winner_exp_gain = core::battle_winner_exp(&winner);

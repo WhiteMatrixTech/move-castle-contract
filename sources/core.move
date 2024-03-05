@@ -46,6 +46,8 @@ module move_castle::core {
     struct Millitary has store {
         attack_power: u64,
         defence_power: u64,
+        total_attack_power: u64,
+        total_defence_power: u64,
         soldiers: u64,
         battle_cooldown: u64,
     }
@@ -88,6 +90,7 @@ module move_castle::core {
                             game_store: &mut GameStore) {
         // 1. get initial power and init castle data
         let (attack_power, defence_power) = get_initial_attack_defence_power(race);
+        let (soldiers_attack_power, soldiers_defense_power) = get_initial_soldiers_attack_defense_power(race, INITIAL_SOLDIERS);
         let castle_data = CastleData {
             id: id,
             size: size,
@@ -109,6 +112,8 @@ module move_castle::core {
             millitary: Millitary {
                 attack_power: attack_power,
                 defence_power: defence_power,
+                total_attack_power: attack_power + soldiers_attack_power,
+                total_defence_power: defence_power + soldiers_defense_power,
                 soldiers: INITIAL_SOLDIERS,
                 battle_cooldown: current_timestamp
             }
@@ -176,20 +181,18 @@ module move_castle::core {
 
     /// Castle's total soldiers attack power
     public fun get_castle_total_soldiers_attack_power(castle_data: &CastleData): u64 {
-        let (soldier_attack_power, _) = get_castle_soldier_attack_defence_power(castle_data);
+        let (soldier_attack_power, _) = get_castle_soldier_attack_defence_power(castle_data.race);
         castle_data.millitary.soldiers * soldier_attack_power
     }
 
     /// Castle's total soldiers defense power
     public fun get_castle_total_soldiers_defence_power(castle_data: &CastleData): u64 {
-        let (_, soldier_defence_power) = get_castle_soldier_attack_defence_power(castle_data);
+        let (_, soldier_defence_power) = get_castle_soldier_attack_defence_power(castle_data.race);
         castle_data.millitary.soldiers * soldier_defence_power
     }
 
     /// Castle's single soldier's attack power and defense power
-    public fun get_castle_soldier_attack_defence_power(castle_data: &CastleData): (u64, u64) {
-        let race = castle_data.race;
-
+    public fun get_castle_soldier_attack_defence_power(race: u64): (u64, u64) {
         let soldier_attack_power;
         let soldier_defence_power;
         if (race == CASTLE_RACE_HUMAN) {
@@ -212,6 +215,10 @@ module move_castle::core {
         };
 
         (soldier_attack_power, soldier_defence_power)
+    }
+
+    public fun get_castle_race(castle_data: &CastleData): u64 {
+        castle_data.race
     }
 
     /// Settle castle's economy, inner method
@@ -284,6 +291,10 @@ module move_castle::core {
         // 6. update soldier economic power buff
         castle_data.economy.soldier_buff.power = SOLDIER_ECONOMIC_POWER * final_soldiers;
         castle_data.economy.soldier_buff.start = clock::timestamp_ms(clock);
+
+        // 7. update total attack/defense power
+        castle_data.millitary.total_attack_power = get_castle_total_attack_power(freeze(castle_data));
+        castle_data.millitary.total_defence_power = get_castle_total_defence_power(freeze(castle_data));
     } 
     
 
@@ -317,16 +328,19 @@ module move_castle::core {
         castle_data.millitary.soldiers = soldiers_left;
         castle_data.economy.soldier_buff.power = calculate_soldiers_economic_power(soldiers_left);
         castle_data.economy.soldier_buff.start = current_timestamp;
-        // 3. exp gain
+        // 3. soldiers caused total attack/defense power
+        castle_data.millitary.total_attack_power = get_castle_total_attack_power(&castle_data);
+        castle_data.millitary.total_defence_power = get_castle_total_defence_power(&castle_data);
+        // 4. exp gain
         castle_data.experience_pool = castle_data.experience_pool + exp_gain;
-        // 4. economy buff
+        // 5. economy buff
         vector::push_back(&mut castle_data.economy.battle_buff, EconomicBuff {
             debuff: !win,
             power: economic_base_power,
             start: current_timestamp,
             end: economy_buff_end,
         });
-        // 5. put back to table
+        // 6. put back to table
         dynamic_field::add(&mut game_store.id, castle_data.id, castle_data);
     }
 
@@ -432,6 +446,11 @@ module move_castle::core {
         };
 
         (attack, defense)
+    }
+
+    fun get_initial_soldiers_attack_defense_power(race: u64, soldiers: u64): (u64, u64) {
+        let (attack, defense) = get_castle_soldier_attack_defence_power(race);
+        (attack * soldiers, defense * soldiers)
     }
 
     /// Get castle soldier limit by castle size
