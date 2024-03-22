@@ -1,10 +1,9 @@
 [package]
-name = "MoveCastle"
+name = "move_castle"
 version = "0.0.1"
-published-at = "0xba70b2a17f3a81f73ec98e8669251f72807ae03e0c16f457cb8708c67136add9"
 
 [dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/devnet" }
 
 [addresses]
 move_castle = "0x0"

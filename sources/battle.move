@@ -1,12 +1,13 @@
 module move_castle::battle {
     use sui::object::{Self, ID};
     use sui::tx_context::TxContext;
+    use sui::clock::{Self, Clock};
     use sui::math;
     use sui::event;
+
     use move_castle::castle::Castle;
     use move_castle::core::{Self, GameStore};
     use move_castle::utils;
-    use sui::clock::{Self, Clock};
     
     /// Battle event
     struct CastleBattleLog has store, copy, drop {
@@ -19,12 +20,6 @@ module move_castle::battle {
         battle_time: u64,
         reparation_end_time: u64
     }
-    
-    const BATTLE_WINNER_COOLDOWN_MS : u64 = 1 * 60 * 60 * 1000;
-    const BATTLE_LOSER_COOLDOWN_MS : u64 = 4 * 60 * 60 * 1000;
-    const BATTLE_LOSER_ECONOMIC_PENALTY_TIME : u64 = 4 * 60 * 60 * 1000;
-
-    const E_BATTLE_COOLDOWN : u64 = 1;
 
     entry fun battle(castle: &mut Castle, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
         // 1. random out a target
@@ -36,8 +31,8 @@ module move_castle::battle {
 
         // 3. check battle cooldown
         let current_timestamp = clock::timestamp_ms(clock);
-        assert!(core::get_castle_battle_cooldown(&attacker) < current_timestamp, E_BATTLE_COOLDOWN);
-        assert!(core::get_castle_battle_cooldown(&defender) < current_timestamp, E_BATTLE_COOLDOWN);
+        assert!(core::get_castle_battle_cooldown(&attacker) < current_timestamp, EBattleCooldown);
+        assert!(core::get_castle_battle_cooldown(&defender) < current_timestamp, EBattleCooldown);
 
         // 4. battle
         // 4.1 calculate total attack power and defense power
@@ -50,7 +45,7 @@ module move_castle::battle {
         } else if (core::has_race_advantage(&defender, &attacker)) {
             defense_power = math::divide_and_round_up(defense_power * 15, 10)
         };
-        
+
         // 4.2 determine win lose
         let (winner, loser);
         if (attack_power > defense_power) {
@@ -64,10 +59,17 @@ module move_castle::battle {
         let loser_id = core::get_castle_id(&loser);
 
         // 5. battle settlement   
-        // 5.1 settling winner
+        // 5.1 setting winner
         core::settle_castle_economy_inner(clock, &mut winner);
-        let (_, winner_soldier_defense_power) = core::get_castle_soldier_attack_defense_power(core::get_castle_race(&winner));
-        let winner_soldiers_left = math::divide_and_round_up(utils::abs_minus(total_soldiers_attack_power, total_soldiers_defense_power), winner_soldier_defense_power);
+        let winner_solders_total_defense_power = core::get_castle_total_soldiers_defense_power(&winner);
+        let loser_solders_total_attack_power = core::get_castle_total_soldiers_defense_power(&loser);
+        let winner_soldiers_left;
+        if (winner_solders_total_defense_power > loser_solders_total_attack_power) {
+            let (_, winner_soldier_defense_power) = core::get_castle_soldier_attack_defense_power(core::get_castle_race(&winner));
+            winner_soldiers_left = math::divide_and_round_up(winner_solders_total_defense_power - loser_solders_total_attack_power, winner_soldier_defense_power);
+        } else {
+            winner_soldiers_left = 0;
+        };
         let winner_soldiers_lost = core::get_castle_soldiers(&winner) - winner_soldiers_left;
         let winner_exp_gain = core::battle_winner_exp(&winner);
         let reparation_economic_power = core::get_castle_economic_base_power(&loser);
@@ -82,6 +84,7 @@ module move_castle::battle {
             winner_soldiers_left,
             winner_exp_gain
         );
+
         // 5.2 settling loser
         core::settle_castle_economy_inner(clock, &mut loser);
         let loser_soldiers_left = 0;
@@ -96,7 +99,7 @@ module move_castle::battle {
             current_timestamp + BATTLE_LOSER_ECONOMIC_PENALTY_TIME,
             loser_soldiers_left,
             0
-        );  
+        );
 
         // 6. emit event
         event::emit(CastleBattleLog {
@@ -111,5 +114,10 @@ module move_castle::battle {
         });
     }
 
+    const BATTLE_WINNER_COOLDOWN_MS : u64 = 30 * 1000; // 30 sec
+    const BATTLE_LOSER_ECONOMIC_PENALTY_TIME : u64 = 2 * 60 * 1000; // 2 min
+    const BATTLE_LOSER_COOLDOWN_MS : u64 = 2 * 60 * 1000; // 2 min
 
+    /// One or both sides of the battle are in battle cooldown
+    const EBattleCooldown: u64 = 0;
 }

@@ -1,28 +1,28 @@
 module move_castle::castle {
-
-    use sui::object::{Self, UID, ID};
-    use sui::transfer;
-    use sui::clock::{Self, Clock};
-    use sui::tx_context::{Self, TxContext};
     use std::string::{Self, utf8, String};
-    use sui::event;
+
+	use sui::object::{Self, ID, UID};
+	use sui::transfer;
+	use sui::tx_context::{Self, TxContext};
     use sui::package;
     use sui::display;
+    use sui::clock::{Self, Clock};
+    use sui::event;
 
     use move_castle::utils;
     use move_castle::core::{Self, GameStore};
 
-    /// The castle
-    struct Castle has key, store {
-        id: UID,
+    /// One-Time-Witness for the module
+    struct CASTLE has drop {}
+
+    /// The castle struct
+    struct Castle has key, store{
+    	id: UID,
         name: String,
         description: String,
         serial_number: u64,
         image_id: String,
     }
-
-    /// One-Time-Witness for the module
-    struct CASTLE has drop {}
 
     /// Event - castle built
     struct CastleBuilt has copy, drop {
@@ -58,18 +58,20 @@ module move_castle::castle {
         transfer::public_transfer(display, tx_context::sender(ctx));
     }
 
-    /// Create new castle
+    /// Build a castle.
     entry fun build_castle(size: u64, name_bytes: vector<u8>, desc_bytes: vector<u8>, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
-        // 1. castle amount check
-        assert!(core::allow_new_castle(size, game_store), E_CASTLE_AMOUNT_LIMIT);
+        // castle amount check
+	    assert!(core::allow_new_castle(size, game_store), ECastleAmountLimit);
 
-        // 2. generate serial number
-        let obj_id = object::new(ctx);
-        let serial_number = utils::generate_castle_serial_number(size, &mut obj_id);
+		// castle object UID.
+		let obj_id = object::new(ctx);
+		
+		// generate serial number.
+		let serial_number = utils::generate_castle_serial_number(size, &mut obj_id);
         let image_id = utils::serial_number_to_image_id(serial_number);
-    
-        // 3. new castle
-        let castle = Castle {
+		
+		// new castle object.
+		let castle = Castle {
             id: obj_id,
             name: string::utf8(name_bytes),
             description: string::utf8(desc_bytes),
@@ -77,7 +79,7 @@ module move_castle::castle {
             image_id: image_id,
         };
 
-        // 4. new castle game data
+        // new castle game data
         let id = object::uid_to_inner(&castle.id);
         let race = get_castle_race(serial_number);
         core::init_castle_data(
@@ -88,20 +90,20 @@ module move_castle::castle {
             game_store
         );
         
-        // 5. transfer to owner
+        // transfer castle object to the owner.
         let owner = tx_context::sender(ctx);
+		transfer::public_transfer(castle, owner);
         event::emit(CastleBuilt{id: id, owner: owner});
-        transfer::public_transfer(castle, owner);
+	}
+
+    /// Transfer castle
+    entry fun transfer_castle(castle: Castle, to: address) {
+        transfer::transfer(castle, to);
     }
 
     /// Settle castle's economy
     entry fun settle_castle_economy(castle: &mut Castle, clock: &Clock, game_store: &mut GameStore) {
         core::settle_castle_economy(object::id(castle), clock, game_store);
-    }
-
-    /// Transfer castle
-    entry fun transfer_castle(castle: Castle, to: address) {
-        transfer::transfer(castle, to);
     }
 
     /// Castle uses treasury to recruit soldiers
@@ -110,7 +112,7 @@ module move_castle::castle {
     }
 
     /// Upgrade castle
-    public entry fun upgrade_castle(castle: &mut Castle, game_store: &mut GameStore) {
+    entry fun upgrade_castle(castle: &mut Castle, game_store: &mut GameStore) {
         core::upgrade_castle(object::id(castle), game_store);
     }
 
@@ -123,14 +125,5 @@ module move_castle::castle {
         race_number
     }
 
-    public entry fun test_set_exp(castle: &mut Castle, exp: u64, game_store: &mut GameStore) {
-        core::test_set_exp(object::id(castle), exp, game_store);
-    }
-
-    public entry fun test_clear_battle_cooldown(castle: &mut Castle, game_store: &mut GameStore) {
-        core::test_clear_battle_cooldown(object::id(castle), game_store);
-    }
-
-    const E_CASTLE_AMOUNT_LIMIT : u64 = 0;
-
+    const ECastleAmountLimit: u64 = 0;
 }

@@ -1,12 +1,11 @@
 module move_castle::utils {
+	use sui::object::{Self, UID};
+    use sui::tx_context::TxContext;
+    use std::string::{Self, String};
     use std::hash;
     use std::vector;
-    use std::string::{Self, utf8, String};
-    use sui::object::{Self, UID};
-    use sui::tx_context::TxContext;
-    use std::debug::print;
 
-    /// Generating the castle's serial number.
+	/// Generating the castle's serial number.
     public fun generate_castle_serial_number(size: u64, id: &mut UID): u64 {
         // hashing on the castle's UID.
         let hash = hash::sha2_256(object::uid_to_bytes(id));
@@ -28,6 +27,28 @@ module move_castle::utils {
     public fun serial_number_to_image_id(serial_number: u64): String {
         let id = serial_number / 10 % 10000u64;
         u64_to_string(id, 4)
+    }
+
+    /// convert u64 to string, if length < fixed length, prepend "0"
+    public fun u64_to_string(n: u64, fixed_length: u64): String {
+        let result: vector<u8> = vector::empty<u8>();
+        if (n == 0) {
+            vector::push_back(&mut result, 48);
+        } else {
+            while (n > 0) {
+                let digit = ((n % 10) as u8) + 48;
+                vector::push_back(&mut result, digit);
+                n = n / 10;
+            };
+
+            // add "0" at the string front util fixed length.
+            while (vector::length(&result) < fixed_length) {
+                vector::push_back(&mut result, 48);
+            };
+
+            vector::reverse<u8>(&mut result);
+        };
+        string::utf8(result)
     }
 
     public fun random_in_range(range: u64, ctx: &mut TxContext):u64 {
@@ -53,27 +74,5 @@ module move_castle::utils {
             result = b - a;
         };
         result
-    }
-
-    /// convert u64 to string, if length < fixed length, prepend "0"
-    public fun u64_to_string(n: u64, fixed_length: u64): String {
-        let result: vector<u8> = vector::empty<u8>();
-        if (n == 0) {
-            vector::push_back(&mut result, 48);
-        } else {
-            while (n > 0) {
-                let digit = ((n % 10) as u8) + 48;
-                vector::push_back(&mut result, digit);
-                n = n / 10;
-            };
-
-            // add "0" at the string front util fixed length.
-            while (vector::length(&result) < fixed_length) {
-                vector::push_back(&mut result, 48);
-            };
-
-            vector::reverse<u8>(&mut result);
-        };
-        string::utf8(result)
     }
 }
