@@ -444,7 +444,7 @@ module move_castle::core {
     fun calculate_castle_base_economic_power(castle_data: &CastleData): u64 {
         let initial_base_power = get_initial_economic_power(castle_data.size);
         let level = castle_data.level;
-        math::divide_and_round_up(initial_base_power * math::pow(12, ((level - 1) as u8)), 100)
+        math::divide_and_round_up(initial_base_power * 12 * math::pow(10, ((level - 1) as u8)), 10)
     }
 
     /// Get castle size factor
@@ -468,8 +468,8 @@ module move_castle::core {
     fun calculate_castle_base_attack_defense_power(castle_data: &CastleData): (u64, u64) {
         let castle_size_factor = get_castle_size_factor(castle_data.size);
         let (initial_attack, initial_defense) = get_initial_attack_defense_power(castle_data.race);
-        let attack_power = math::divide_and_round_up(castle_size_factor * initial_attack * math::pow(12, ((castle_data.level - 1) as u8)), 100);
-        let defense_power = math::divide_and_round_up(castle_size_factor * initial_defense * math::pow(12, ((castle_data.level - 1) as u8)), 100);
+        let attack_power = math::divide_and_round_up(castle_size_factor * initial_attack * 12 * math::pow(10, ((castle_data.level - 1) as u8)), 10);
+        let defense_power = math::divide_and_round_up(castle_size_factor * initial_defense * 12 * math::pow(10, ((castle_data.level - 1) as u8)), 10);
         (attack_power, defense_power)
     }
 
