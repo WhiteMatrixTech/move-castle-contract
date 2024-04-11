@@ -43,7 +43,7 @@ module move_castle::castle {
         let values = vector[
             utf8(b"{name}"),
             utf8(b"https://movecastle.info/castles/{serial_number}"),
-            utf8(b"https://movecastle.info/static/media/castles/{image_id}.png"),
+            utf8(b"https://images.movecastle.info/static/media/castles/{image_id}.png"),
             utf8(b"{description}"),
             utf8(b"https://movecastle.info"),
             utf8(b"Castle Builder"),
