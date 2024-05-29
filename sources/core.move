@@ -1,9 +1,4 @@
 module move_castle::core {
-    use std::vector;
-
-    use sui::object::{Self, UID, ID};
-    use sui::transfer;
-    use sui::tx_context::{Self, TxContext};
     use sui::dynamic_field;
     use sui::math;
     use sui::clock::{Self, Clock};
@@ -11,7 +6,7 @@ module move_castle::core {
     use move_castle::utils;
 
     /// Holding game info
-    struct GameStore has key, store {
+    public struct GameStore has key, store {
         id: UID,
         small_castle_count: u64, // for small castle amount limit
         middle_castle_count: u64, // for middle castle amount limit
@@ -19,7 +14,7 @@ module move_castle::core {
         castle_ids: vector<ID>, // holding all castle object ids
     }
 
-    struct CastleData has store {
+    public struct CastleData has store {
         id: ID,
         size: u64,
         race: u64,
@@ -29,7 +24,7 @@ module move_castle::core {
         millitary: Millitary,
     }
 
-    struct Economy has store {
+    public struct Economy has store {
         treasury: u64,
         base_power: u64,
         settle_time: u64,
@@ -37,14 +32,14 @@ module move_castle::core {
         battle_buff: vector<EconomicBuff>,
     }
 
-    struct EconomicBuff has copy, store, drop {
+    public struct EconomicBuff has copy, store, drop {
         debuff: bool,
         power: u64,
         start: u64,
         end: u64,
     }
 
-    struct Millitary has store {
+    public struct Millitary has store {
         attack_power: u64,
         defense_power: u64,
         total_attack_power: u64,
@@ -54,7 +49,7 @@ module move_castle::core {
     }
 
     /// Capability to modify game settings
-    struct AdminCap has key {
+    public struct AdminCap has key {
         id: UID
     }
 
@@ -77,7 +72,7 @@ module move_castle::core {
 	}
 
     /// initialize the castle data
-    public fun init_castle_data(id: ID,
+    public(package) fun init_castle_data(id: ID,
                                 size: u64,
                                 race: u64,
                                 current_timestamp: u64,
@@ -130,7 +125,7 @@ module move_castle::core {
     }
 
     /// Settle castle's economy, inner method
-    public fun settle_castle_economy_inner(clock: &Clock, castle_data: &mut CastleData) {
+    public(package) fun settle_castle_economy_inner(clock: &Clock, castle_data: &mut CastleData) {
         let current_timestamp = clock::timestamp_ms(clock);
 
         // 1. calculate base power benefits
@@ -146,11 +141,11 @@ module move_castle::core {
         // 3. calculate battle buff
         if (!vector::is_empty(&castle_data.economy.battle_buff)) {
             let length = vector::length(&castle_data.economy.battle_buff);
-            let expired_buffs = vector::empty<u64>();
-            let i = 0;
+            let mut expired_buffs = vector::empty<u64>();
+            let mut i = 0;
             while (i < length) {
                 let buff = vector::borrow_mut(&mut castle_data.economy.battle_buff, i);
-                let battle_benefit;
+                let mut battle_benefit;
                 if (buff.end <= current_timestamp) {
                     vector::push_back(&mut expired_buffs, i);
                     battle_benefit = calculate_economic_benefits(buff.start, buff.end, buff.power);
@@ -177,7 +172,7 @@ module move_castle::core {
     } 
 
     /// Settle castle's economy, including victory rewards and defeat penalties
-    public fun settle_castle_economy(id: ID, clock: &Clock, game_store: &mut GameStore) {
+    public(package) fun settle_castle_economy(id: ID, clock: &Clock, game_store: &mut GameStore) {
         settle_castle_economy_inner(clock, dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id));
     }   
 
@@ -243,17 +238,17 @@ module move_castle::core {
     }
 
     /// Castle uses treasury to recruit soldiers
-    public fun recruit_soldiers (id: ID, count: u64, clock: &Clock, game_store: &mut GameStore) {
+    public(package) fun recruit_soldiers (id: ID, count: u64, clock: &Clock, game_store: &mut GameStore) {
         // 1. borrow the castle data
         let castle_data = dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id);
 
         // 2. check count limit
         let final_soldiers = castle_data.millitary.soldiers + count;
-        assert!(final_soldiers <= get_castle_soldier_limit(castle_data.size), 0);
+        assert!(final_soldiers <= get_castle_soldier_limit(castle_data.size), ESoldierCountLimit);
 
         // 3. check treasury sufficiency
         let total_soldier_price = SOLDIER_PRICE * count;
-        assert!(castle_data.economy.treasury >= total_soldier_price, 0);
+        assert!(castle_data.economy.treasury >= total_soldier_price, EInsufficientTreasury);
 
         // 4. settle economy
         settle_castle_economy_inner(clock, castle_data);
@@ -272,12 +267,12 @@ module move_castle::core {
     }
 
     // Random a target castle id
-    public fun random_battle_target(from_castle: ID, game_store: &GameStore, ctx: &mut TxContext): ID {
+    public(package) fun random_battle_target(from_castle: ID, game_store: &GameStore, ctx: &mut TxContext): ID {
         let total_length = vector::length<ID>(&game_store.castle_ids);
-        assert!(total_length > 1, 0);
+        assert!(total_length > 1, ENotEnoughCastles);
 
-        let random_index = utils::random_in_range(total_length, ctx);
-        let target = vector::borrow<ID>(&game_store.castle_ids, random_index);
+        let mut random_index = utils::random_in_range(total_length, ctx);
+        let mut target = vector::borrow<ID>(&game_store.castle_ids, random_index);
 
         while (object::id_to_address(&from_castle) == object::id_to_address(target)) {
             // redo random until not equals
@@ -288,18 +283,18 @@ module move_castle::core {
         object::id_from_address(object::id_to_address(target))
     }
 
-    public fun fetch_castle_data(id1: ID, id2: ID, game_store: &mut GameStore): (CastleData, CastleData) {
+    public(package) fun fetch_castle_data(id1: ID, id2: ID, game_store: &mut GameStore): (CastleData, CastleData) {
         let castle_data1 = dynamic_field::remove<ID, CastleData>(&mut game_store.id, id1);
         let castle_data2 = dynamic_field::remove<ID, CastleData>(&mut game_store.id, id2);
         (castle_data1, castle_data2)
     }
 
-    public fun get_castle_battle_cooldown(castle_data: &CastleData): u64 {
+    public(package) fun get_castle_battle_cooldown(castle_data: &CastleData): u64 {
         castle_data.millitary.battle_cooldown
     }
 
     /// Castle's single soldier's attack power and defense power
-    public fun get_castle_soldier_attack_defense_power(race: u64): (u64, u64) {
+    public(package) fun get_castle_soldier_attack_defense_power(race: u64): (u64, u64) {
         let soldier_attack_power;
         let soldier_defense_power;
         if (race == CASTLE_RACE_HUMAN) {
@@ -324,34 +319,34 @@ module move_castle::core {
         (soldier_attack_power, soldier_defense_power)
     }
 
-    public fun get_castle_race(castle_data: &CastleData): u64 {
+    public(package) fun get_castle_race(castle_data: &CastleData): u64 {
         castle_data.race
     }
 
     /// Castle's total soldiers attack power
-    public fun get_castle_total_soldiers_attack_power(castle_data: &CastleData): u64 {
+    public(package) fun get_castle_total_soldiers_attack_power(castle_data: &CastleData): u64 {
         let (soldier_attack_power, _) = get_castle_soldier_attack_defense_power(castle_data.race);
         castle_data.millitary.soldiers * soldier_attack_power
     }
 
     /// Castle's total soldiers defense power
-    public fun get_castle_total_soldiers_defense_power(castle_data: &CastleData): u64 {
+    public(package) fun get_castle_total_soldiers_defense_power(castle_data: &CastleData): u64 {
         let (_, soldier_defense_power) = get_castle_soldier_attack_defense_power(castle_data.race);
         castle_data.millitary.soldiers * soldier_defense_power
     }
 
     /// Castle's total attack power (base + soldiers)
-    public fun get_castle_total_attack_power(castle_data: &CastleData): u64 {
+    public(package) fun get_castle_total_attack_power(castle_data: &CastleData): u64 {
         castle_data.millitary.attack_power + get_castle_total_soldiers_attack_power(castle_data)
     }
 
     /// Castle's total defense power (base + soldiers)
-    public fun get_castle_total_defense_power(castle_data: &CastleData): u64 {
+    public(package) fun get_castle_total_defense_power(castle_data: &CastleData): u64 {
         castle_data.millitary.defense_power + get_castle_total_soldiers_defense_power(castle_data)
     }
     
     // If has race advantage
-    public fun has_race_advantage(castle_data1: &CastleData, castle_data2: &CastleData): bool {
+    public(package) fun has_race_advantage(castle_data1: &CastleData, castle_data2: &CastleData): bool {
         let c1_race = castle_data1.race;
         let c2_race = castle_data2.race;
 
@@ -367,29 +362,30 @@ module move_castle::core {
         has
     }
 
-    public fun get_castle_id(castle_data: &CastleData): ID {
+    public(package) fun get_castle_id(castle_data: &CastleData): ID {
         castle_data.id
     }
 
-    public fun get_castle_soldiers(castle_data: &CastleData): u64 {
+    public(package) fun get_castle_soldiers(castle_data: &CastleData): u64 {
         castle_data.millitary.soldiers
     }
 
-    public fun battle_winner_exp(castle_data: &CastleData): u64 {
-        *vector::borrow<u64>(&BATTLE_EXP_GAIN_LEVELS, castle_data.level)
+    public(package) fun battle_winner_exp(castle_data: &CastleData): u64 {
+        let battle_exp_map = BATTLE_EXP_GAIN_LEVELS;
+        *vector::borrow<u64>(&battle_exp_map, castle_data.level)
     }
 
-    public fun get_castle_economic_base_power(castle_data: &CastleData): u64 {
+    public(package) fun get_castle_economic_base_power(castle_data: &CastleData): u64 {
         castle_data.economy.base_power
     }
 
     // Calculate soldiers economic power
-    public fun calculate_soldiers_economic_power(count: u64): u64 {
+    public(package) fun calculate_soldiers_economic_power(count: u64): u64 {
         SOLDIER_ECONOMIC_POWER * count
     }
 
     /// Settle battle
-    public fun battle_settlement_save_castle_data(game_store: &mut GameStore, castle_data: CastleData, win: bool, cooldown: u64, economic_base_power: u64, current_timestamp: u64, economy_buff_end: u64, soldiers_left: u64, exp_gain: u64) {
+    public(package) fun battle_settlement_save_castle_data(game_store: &mut GameStore, mut castle_data: CastleData, win: bool, cooldown: u64, economic_base_power: u64, current_timestamp: u64, economy_buff_end: u64, soldiers_left: u64, exp_gain: u64) {
         // 1. battle cooldown
         castle_data.millitary.battle_cooldown = cooldown;
         // 2. soldier left
@@ -413,14 +409,15 @@ module move_castle::core {
     }
 
     /// Consume experience points from the experience pool to upgrade the castle
-    public fun upgrade_castle(id: ID, game_store: &mut GameStore) {
+    public(package) fun upgrade_castle(id: ID, game_store: &mut GameStore) {
         // 1. fetch castle data
         let castle_data = dynamic_field::borrow_mut<ID, CastleData>(&mut game_store.id, id);
 
         // 2. continually upgrade if exp is enough
         let initial_level = castle_data.level;
+        let exp_level_map = REQUIRED_EXP_LEVELS;
         while (castle_data.level < MAX_CASTLE_LEVEL) {
-            let exp_required_at_current_level = *vector::borrow(&REQUIRED_EXP_LEVELS, castle_data.level - 1);
+            let exp_required_at_current_level = *vector::borrow(&exp_level_map, castle_data.level - 1);
             if(castle_data.experience_pool < exp_required_at_current_level) {
                 break
             };
@@ -473,7 +470,7 @@ module move_castle::core {
         (attack_power, defense_power)
     }
 
-    public fun allow_new_castle(size: u64, game_store: &GameStore): bool {
+    public(package) fun allow_new_castle(size: u64, game_store: &GameStore): bool {
         let allow;
         if (size == CASTLE_SIZE_SMALL) {
             allow = game_store.small_castle_count < CASTLE_AMOUNT_LIMIT_SMALL;
