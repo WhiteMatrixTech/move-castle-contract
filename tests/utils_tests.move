@@ -14,7 +14,7 @@ module move_castle::utils_tests {
     fun random_in_range_test() {
         let sender = @0xABC;
 
-        let scenario_val = test_scenario::begin(sender);
+        let mut scenario_val = test_scenario::begin(sender);
         let scenario = &mut scenario_val;
         {
             let ctx = test_scenario::ctx(scenario);
@@ -43,11 +43,11 @@ module move_castle::utils_tests {
     fun serial_number_test() {
         let sender = @0xABC;
 
-        let scenario_val = test_scenario::begin(sender);
+        let mut scenario_val = test_scenario::begin(sender);
         let scenario = &mut scenario_val;
         {
             let ctx = test_scenario::ctx(scenario);
-            let uid = object::new(ctx);
+            let mut uid = object::new(ctx);
             let result = utils::generate_castle_serial_number(0, &mut uid);
             print(&result);
             assert!(result >= 0, 0);

@@ -1,16 +1,13 @@
 module move_castle::battle {
-    use sui::object::{Self, ID};
-    use sui::tx_context::TxContext;
     use sui::clock::{Self, Clock};
     use sui::math;
     use sui::event;
 
     use move_castle::castle::Castle;
     use move_castle::core::{Self, GameStore};
-    use move_castle::utils;
     
     /// Battle event
-    struct CastleBattleLog has store, copy, drop {
+    public struct CastleBattleLog has store, copy, drop {
         attacker: ID,
         winner: ID,
         loser: ID,
@@ -21,7 +18,7 @@ module move_castle::battle {
         reparation_end_time: u64
     }
 
-    entry fun battle(castle: &mut Castle, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
+    entry fun battle(castle: &Castle, clock: &Clock, game_store: &mut GameStore, ctx: &mut TxContext) {
         // 1. random out a target
         let attacker_id = object::id(castle);
         let target_id = core::random_battle_target(attacker_id, game_store, ctx);
@@ -36,10 +33,8 @@ module move_castle::battle {
 
         // 4. battle
         // 4.1 calculate total attack power and defense power
-        let attack_power = core::get_castle_total_attack_power(&attacker);
-        let defense_power = core::get_castle_total_defense_power(&defender);
-        let total_soldiers_attack_power = core::get_castle_total_soldiers_attack_power(&attacker);
-        let total_soldiers_defense_power = core::get_castle_total_soldiers_defense_power(&defender);
+        let mut attack_power = core::get_castle_total_attack_power(&attacker);
+        let mut defense_power = core::get_castle_total_defense_power(&defender);
         if (core::has_race_advantage(&attacker, &defender)) {
             attack_power = math::divide_and_round_up(attack_power * 15, 10)
         } else if (core::has_race_advantage(&defender, &attacker)) {
@@ -47,7 +42,7 @@ module move_castle::battle {
         };
 
         // 4.2 determine win lose
-        let (winner, loser);
+        let (mut winner, mut loser);
         if (attack_power > defense_power) {
             winner = attacker;
             loser = defender;
@@ -62,7 +57,7 @@ module move_castle::battle {
         // 5.1 setting winner
         core::settle_castle_economy_inner(clock, &mut winner);
         let winner_solders_total_defense_power = core::get_castle_total_soldiers_defense_power(&winner);
-        let loser_solders_total_attack_power = core::get_castle_total_soldiers_defense_power(&loser);
+        let loser_solders_total_attack_power = core::get_castle_total_soldiers_attack_power(&loser);
         let winner_soldiers_left;
         if (winner_solders_total_defense_power > loser_solders_total_attack_power) {
             let (_, winner_soldier_defense_power) = core::get_castle_soldier_attack_defense_power(core::get_castle_race(&winner));

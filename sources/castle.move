@@ -1,9 +1,6 @@
 module move_castle::castle {
     use std::string::{Self, utf8, String};
 
-	use sui::object::{Self, ID, UID};
-	use sui::transfer;
-	use sui::tx_context::{Self, TxContext};
     use sui::package;
     use sui::display;
     use sui::clock::{Self, Clock};
@@ -13,10 +10,10 @@ module move_castle::castle {
     use move_castle::core::{Self, GameStore};
 
     /// One-Time-Witness for the module
-    struct CASTLE has drop {}
+    public struct CASTLE has drop {}
 
     /// The castle struct
-    struct Castle has key, store{
+    public struct Castle has key, store{
     	id: UID,
         name: String,
         description: String,
@@ -25,7 +22,7 @@ module move_castle::castle {
     }
 
     /// Event - castle built
-    struct CastleBuilt has copy, drop {
+    public struct CastleBuilt has copy, drop {
         id: ID,
         owner: address,
     }
@@ -50,7 +47,7 @@ module move_castle::castle {
         ];
 
         let publisher = package::claim(otw, ctx);
-        let display = display::new_with_fields<Castle>(&publisher, keys, values, ctx);
+        let mut display = display::new_with_fields<Castle>(&publisher, keys, values, ctx);
 
         display::update_version(&mut display);
 
@@ -67,7 +64,7 @@ module move_castle::castle {
 		let obj_id = object::new(ctx);
 		
 		// generate serial number.
-		let serial_number = utils::generate_castle_serial_number(size, &mut obj_id);
+		let serial_number = utils::generate_castle_serial_number(size, &obj_id);
         let image_id = utils::serial_number_to_image_id(serial_number);
 		
 		// new castle object.
@@ -96,29 +93,30 @@ module move_castle::castle {
         event::emit(CastleBuilt{id: id, owner: owner});
 	}
 
+    #[allow(lint(custom_state_change))]
     /// Transfer castle
     entry fun transfer_castle(castle: Castle, to: address) {
         transfer::transfer(castle, to);
     }
 
     /// Settle castle's economy
-    entry fun settle_castle_economy(castle: &mut Castle, clock: &Clock, game_store: &mut GameStore) {
+    entry fun settle_castle_economy(castle: &Castle, clock: &Clock, game_store: &mut GameStore) {
         core::settle_castle_economy(object::id(castle), clock, game_store);
     }
 
     /// Castle uses treasury to recruit soldiers
-    entry fun recruit_soldiers (castle: &mut Castle, count: u64, clock: &Clock, game_store: &mut GameStore) {
+    entry fun recruit_soldiers (castle: &Castle, count: u64, clock: &Clock, game_store: &mut GameStore) {
         core::recruit_soldiers(object::id(castle), count, clock, game_store);
     }
 
     /// Upgrade castle
-    entry fun upgrade_castle(castle: &mut Castle, game_store: &mut GameStore) {
+    entry fun upgrade_castle(castle: &Castle, game_store: &mut GameStore) {
         core::upgrade_castle(object::id(castle), game_store);
     }
 
     /// Get castle race
-    public fun get_castle_race(serial_number: u64): u64 {
-        let race_number = serial_number % 10;
+    public(package) fun get_castle_race(serial_number: u64): u64 {
+        let mut race_number = serial_number % 10;
         if (race_number >= 5) {
             race_number = race_number - 5;
         };
